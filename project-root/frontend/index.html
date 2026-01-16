@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>在线编程系统</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #1e1e1e;
+      color: #d4d4d4;
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    
+    h1 {
+      text-align: center;
+      margin-bottom: 30px;
+      color: #ffffff;
+    }
+    
+    .test-section {
+      background-color: #252526;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    
+    .test-section h2 {
+      margin-bottom: 15px;
+      color: #ffffff;
+    }
+    
+    .btn {
+      background-color: #007acc;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      margin-right: 10px;
+    }
+    
+    .btn:hover {
+      background-color: #005a9e;
+    }
+    
+    .result {
+      margin-top: 15px;
+      padding: 10px;
+      background-color: #1e1e1e;
+      border: 1px solid #333;
+      border-radius: 4px;
+      font-family: monospace;
+      white-space: pre-wrap;
+    }
+    
+    .terminal {
+      margin-top: 15px;
+      padding: 10px;
+      background-color: #1e1e1e;
+      border: 1px solid #333;
+      border-radius: 4px;
+      font-family: monospace;
+      height: 300px;
+      overflow-y: auto;
+    }
+    
+    .input-area {
+      margin-top: 15px;
+    }
+    
+    textarea {
+      width: 100%;
+      padding: 10px;
+      background-color: #1e1e1e;
+      color: #d4d4d4;
+      border: 1px solid #333;
+      border-radius: 4px;
+      font-family: monospace;
+      resize: vertical;
+      min-height: 100px;
+    }
+    
+    select {
+      padding: 8px;
+      background-color: #1e1e1e;
+      color: #d4d4d4;
+      border: 1px solid #333;
+      border-radius: 4px;
+      margin-right: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>在线编程系统 - 测试页面</h1>
+    
+    <!-- 健康检查测试 -->
+    <div class="test-section">
+      <h2>1. 健康检查测试</h2>
+      <button class="btn" onclick="testHealthCheck()">测试健康检查</button>
+      <div class="result" id="health-result"></div>
+    </div>
+    
+    <!-- WebSocket测试 -->
+    <div class="test-section">
+      <h2>2. WebSocket连接测试</h2>
+      <button class="btn" onclick="connectWebSocket()">连接WebSocket</button>
+      <button class="btn" onclick="disconnectWebSocket()">断开WebSocket</button>
+      <div class="terminal" id="terminal"></div>
+    </div>
+    
+    <!-- 代码运行测试 -->
+    <div class="test-section">
+      <h2>3. 代码运行测试</h2>
+      <select id="language">
+        <option value="python">Python</option>
+        <option value="go">Go</option>
+        <option value="java">Java</option>
+      </select>
+      <button class="btn" onclick="runCode()">运行代码</button>
+      <div class="input-area">
+        <textarea id="code" placeholder="请输入代码...">print("Hello, World!")</textarea>
+      </div>
+      <div class="terminal" id="code-terminal"></div>
+    </div>
+  </div>
+  
+  <script>
+    let ws = null;
+    let codeWs = null;
+    
+    // 测试健康检查
+    function testHealthCheck() {
+      const resultDiv = document.getElementById('health-result');
+      resultDiv.textContent = '测试中...';
+      
+      fetch('http://localhost:8082/health')
+        .then(response => response.json())
+        .then(data => {
+          resultDiv.textContent = JSON.stringify(data, null, 2);
+        })
+        .catch(error => {
+          resultDiv.textContent = `错误: ${error.message}`;
+        });
+    }
+    
+    // 连接WebSocket
+    function connectWebSocket() {
+      const terminal = document.getElementById('terminal');
+      terminal.textContent = '连接中...';
+      
+      ws = new WebSocket('ws://localhost:8082/ws/run');
+      
+      ws.onopen = () => {
+        terminal.textContent += '\nWebSocket连接已建立';
+      };
+      
+      ws.onmessage = (event) => {
+        terminal.textContent += '\n' + event.data;
+      };
+      
+      ws.onclose = () => {
+        terminal.textContent += '\nWebSocket连接已关闭';
+      };
+      
+      ws.onerror = (error) => {
+        terminal.textContent += `\nWebSocket错误: ${error}`;
+      };
+    }
+    
+    // 断开WebSocket
+    function disconnectWebSocket() {
+      if (ws) {
+        ws.close();
+        ws = null;
+      }
+    }
+    
+    // 运行代码
+    function runCode() {
+      const code = document.getElementById('code').value;
+      const language = document.getElementById('language').value;
+      const terminal = document.getElementById('code-terminal');
+      
+      terminal.textContent = '连接中...';
+      
+      // 关闭之前的连接
+      if (codeWs) {
+        codeWs.close();
+      }
+      
+      codeWs = new WebSocket('ws://localhost:8082/ws/run');
+      
+      codeWs.onopen = () => {
+        terminal.textContent += '\nWebSocket连接已建立';
+        terminal.textContent += `\n开始运行 ${language} 代码...`;
+        
+        // 发送代码运行请求
+        const message = {
+          type: 'run',
+          code: code,
+          language: language
+        };
+        codeWs.send(JSON.stringify(message));
+      };
+      
+      codeWs.onmessage = (event) => {
+        terminal.textContent += '\n' + event.data;
+      };
+      
+      codeWs.onclose = () => {
+        terminal.textContent += '\nWebSocket连接已关闭';
+      };
+      
+      codeWs.onerror = (error) => {
+        terminal.textContent += `\nWebSocket错误: ${error}`;
+      };
+    }
+  </script>
+</body>
+</html>
