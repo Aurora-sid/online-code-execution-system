@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: code_exec_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: code_exec
+    ports:
+      - "13306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - code_exec_net
+
+  redis:
+    image: redis:alpine
+    container_name: code_exec_redis
+    ports:
+      - "16379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - code_exec_net
+
+networks:
+  code_exec_net:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  redis_data:
