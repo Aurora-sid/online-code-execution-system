@@ -1,12 +1,12 @@
 <template>
-  <div ref="editorContainer" class="w-full h-full border border-gray-700 rounded-lg overflow-hidden"></div>
+  <div ref="editorContainer" class="absolute inset-0 w-full h-full"></div>
 </template>
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import * as monaco from 'monaco-editor'
 
-// Workers configuration
+// 工作线程配置
 import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
 import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
 import cssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker'

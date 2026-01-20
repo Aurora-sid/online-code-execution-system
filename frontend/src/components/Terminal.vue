@@ -1,5 +1,5 @@
 <template>
-  <div ref="terminalContainer" class="w-full h-full bg-black p-2 rounded-lg overflow-hidden"></div>
+  <div ref="terminalContainer" class="w-full h-full pl-2 pb-2"></div>
 </template>
 
 <script setup>
@@ -15,10 +15,13 @@ let fitAddon = null
 onMounted(() => {
   term = new Terminal({
     cursorBlink: true,
-    fontFamily: 'Consolas, monospace',
+    cursorStyle: 'bar',
+    cursorInactiveStyle: 'bar',
+    fontFamily: '"JetBrains Mono", Consolas, monospace',
     fontSize: 14,
     theme: {
-      background: '#1e1e1e'
+      background: '#00000000', // Transparent
+      foreground: '#F1F5F9'
     },
     convertEol: true,
   })
@@ -28,15 +31,15 @@ onMounted(() => {
   
   term.open(terminalContainer.value)
   
-  // Use setTimeout to ensure container has proper dimensions
+  // 使用setTimeout确保容器具有正确的尺寸
   setTimeout(() => {
     fitAddon.fit()
   }, 100)
   
-  term.writeln('Welcome to Online Code Executor')
-  term.writeln('Waiting for output...')
+  term.writeln('欢迎使用在线代码执行器')
+  term.writeln('等待输出...')
   
-  // Refit on window resize
+  // 在窗口调整大小时重新适应
   window.addEventListener('resize', () => {
     if (fitAddon) fitAddon.fit()
   })
@@ -56,3 +59,15 @@ onBeforeUnmount(() => {
   if (term) term.dispose()
 })
 </script>
+
+<style scoped>
+/* Force cursor to blink even when not focused */
+:deep(.xterm-cursor) {
+  animation: xterm-cursor-blink 1s step-end infinite !important;
+}
+
+@keyframes xterm-cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+</style>
