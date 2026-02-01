@@ -3,7 +3,7 @@
   <Transition name="overlay">
     <div 
       v-if="show" 
-      class="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+      class="fixed inset-0 bg-black/50 z-40"
       @click="$emit('update:show', false)"
     ></div>
   </Transition>
@@ -12,7 +12,7 @@
   <Transition name="slide">
     <div 
       v-if="show"
-      class="fixed top-0 right-0 h-full w-full max-w-md bg-surface/95 backdrop-blur-xl border-l border-white/10 shadow-2xl z-50 flex flex-col"
+      class="fixed top-0 right-0 h-full w-full max-w-md bg-surface/95 border-l border-white/10 shadow-2xl z-50 flex flex-col"
     >
       <!-- Header -->
       <div class="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-surface/50">

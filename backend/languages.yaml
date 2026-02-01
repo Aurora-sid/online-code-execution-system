@@ -1,0 +1,29 @@
+languages:
+  - id: python
+    image: code-exec/python
+    filename: main.py
+    run_cmd: ["python", "-u", "main.py"]
+  - id: java
+    image: code-exec/java
+    filename: Main.java
+    compile_cmd: ["sh", "-c", "javac Main.java && java Main"]
+  - id: cpp
+    image: code-exec/cpp
+    filename: main.cpp
+    compile_cmd: ["sh", "-c", "g++ main.cpp -o main && ./main"]
+  - id: c
+    image: code-exec/c
+    filename: main.c
+    compile_cmd: ["sh", "-c", "gcc main.c -o main && ./main"]
+  - id: go
+    image: code-exec/go
+    filename: main.go
+    run_cmd: ["go", "run", "main.go"]
+  - id: pypy
+    image: code-exec/pypy
+    filename: main.py
+    run_cmd: ["pypy3", "-u", "main.py"]
+  - id: javascript
+    image: code-exec/js
+    filename: main.js
+    run_cmd: ["node", "main.js"]

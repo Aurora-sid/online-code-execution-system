@@ -7,7 +7,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-var SecretKey = []byte("your-secret-key") // In production, load from config
+var SecretKey = []byte("your-secret-key") // 生产环境中请从配置加载
 
 type Claims struct {
 	UserID uint `json:"user_id"`

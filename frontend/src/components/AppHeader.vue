@@ -1,111 +1,101 @@
 <template>
-  <header class="bg-white/90 backdrop-blur-md border-b border-zinc-200 sticky top-0 z-50">
-    <div class="px-6 py-4">
-      <div class="flex justify-between items-center relative">
-        <!-- Logo 部分 -->
-        <div class="h-10 w-10 flex items-center justify-center group cursor-default group-hover:scale-105 transition-transform duration-300">
-          <img src="../assets/nano-banana.png" alt="Nano Banana" class="w-full h-full object-contain drop-shadow-md" />
-        </div>
-        
-        <!-- 居中标题 - 小屏幕隐藏 -->
-        <div class="absolute left-1/2 -translate-x-1/2 hidden lg:block">
-          <h1 class="text-xl font-bold tracking-[0.5em] bg-clip-text text-transparent bg-gradient-to-r from-cyan-500 to-blue-500 font-sans whitespace-nowrap">
-            在线编程系统
-          </h1>
-        </div>
-        
-        <!-- 操作部分 -->
-        <div class="flex items-center gap-2 sm:gap-4">
-          <LanguageSelector v-model="internalLanguage" />
-          
-          <div class="h-6 w-[1px] bg-zinc-300 mx-1 hidden sm:block"></div>
+  <header class="h-14 border-b border-border flex items-center justify-between px-2 md:px-4 z-10 bg-gray-300/80 shadow-sm">
+    <!-- 左侧：Logo -->
+    <div class="flex items-center gap-2 md:gap-3 flex-shrink-0">
+      <div class="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-glow-primary flex-shrink-0">
+        <img src="../assets/TX.jpg" class="w-full h-full object-contain">
+      </div>
+      <div class="hidden sm:block">
+        <h1 class="font-bold text-sm md:text-lg tracking-tight">
+          <span class="text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 animate-gradient-x tracking-[0.1em] [word-spacing:0.3em] md:[word-spacing:0.6em]">Aurora Code</span>
+        </h1>
+        <div class="hidden md:block text-[9px] font-bold tracking-widest uppercase text-transparent bg-clip-text bg-gradient-to-r from-cyan-500 to-blue-600">Online Execution Environment</div>
+      </div>
+    </div>
 
-          <!-- 历史记录按钮 -->
-          <button 
-            @click="$emit('toggle-history')"
-            class="p-2.5 rounded-lg bg-zinc-100 border border-zinc-200 hover:bg-zinc-200 hover:border-zinc-300 text-zinc-500 hover:text-zinc-800 transition-all duration-200 group relative"
-            title="查看历史记录"
+    <!-- 右侧：操作区 -->
+    <div class="flex items-center gap-1 md:gap-4">
+      <!-- 语言选择器 -->
+      <LanguageSelector v-model="internalLanguage" />
+
+      <!-- 操作按钮 -->
+      <div class="flex items-center gap-1 md:gap-2">
+        <!-- 文件夹按钮（切换侧边栏） -->
+        <button 
+          @click="$emit('toggle-sidebar')"
+          class="flex items-center justify-center gap-2 p-2 md:px-4 md:py-1.5 rounded-lg bg-gradient-to-r from-blue-400 to-cyan-500 text-white font-medium text-sm transition-all active:scale-95 hover:scale-105 shadow-md hover:shadow-lg hover:brightness-110 border-none"
+          :title="sidebarOpen ? '收起文件夹' : '打开文件夹'"
+        >
+          <i :class="sidebarOpen ? 'ph ph-folder-minus' : 'ph ph-folder-open'" class="text-sm"></i>
+          <span class="hidden lg:inline">{{ sidebarOpen ? '收起文件夹' : '打开文件夹' }}</span>
+        </button>
+
+        <!-- 历史记录按钮 -->
+        <button 
+          @click="$emit('toggle-history')"
+          class="flex items-center justify-center gap-2 p-2 md:px-4 md:py-1.5 rounded-lg bg-gradient-to-r from-orange-400 to-pink-500 text-white font-medium text-sm transition-all active:scale-95 hover:scale-105 shadow-md hover:shadow-lg hover:brightness-110 border-none"
+          title="历史记录"
+        >
+          <i class="ph ph-clock-counter-clockwise text-sm"></i>
+          <span class="hidden lg:inline">历史记录</span>
+        </button>
+
+        <!-- 保存按钮 -->
+        <button 
+          @click="$emit('save')"
+          class="flex items-center justify-center gap-2 p-2 md:px-4 md:py-1.5 rounded-lg bg-gradient-to-r from-emerald-400 to-teal-500 text-white font-medium text-sm transition-all active:scale-95 hover:scale-105 shadow-md hover:shadow-lg hover:brightness-110 border-none"
+          title="保存至本地"
+        >
+          <i class="ph ph-download-simple text-sm"></i>
+          <span class="hidden lg:inline">保存至本地</span>
+        </button>
+
+        <!-- 运行按钮 -->
+        <button 
+          @click="$emit('run')"
+          :disabled="loading"
+          class="flex items-center justify-center gap-2 p-2 md:px-5 md:py-1.5 rounded-lg bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] text-white font-semibold text-sm shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50 hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+        >
+          <img v-if="!loading" src="../assets/Vue-icons/run.png" alt="运行" class="w-5 h-5 md:w-6 md:h-6">
+          <i v-else class="ph ph-spinner animate-spin text-lg"></i>
+          <span class="hidden md:inline tracking-[0.3em]">{{ loading ? '运行中...' : '运行代码' }}</span>
+        </button>
+      </div>
+
+      <!-- 用户头像 -->
+      <div class="relative flex-shrink-0" ref="userMenuRef">
+        <button
+          @click="showUserMenu = !showUserMenu"
+          class="h-8 md:h-10 px-2 md:px-3 rounded-xl bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 hover:from-indigo-100 hover:via-purple-100 hover:to-pink-100 text-gray-700 text-sm font-bold flex items-center gap-1 md:gap-2 shadow-sm hover:shadow-md transition-all active:scale-95 hover:scale-105 border border-indigo-100/50"
+        >
+          <img src="../assets/Vue-icons/user.png" alt="用户头像" class="w-5 h-5 md:w-6 md:h-6 rounded-full">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 hidden md:block"></span>
+          <span class="hidden sm:inline">{{ user?.username || 'Guest' }}</span>
+        </button>
+
+        <!-- 下拉菜单 -->
+        <Transition name="dropdown">
+          <div 
+            v-if="showUserMenu"
+            class="absolute right-0 mt-3 w-56 bg-white rounded-xl shadow-2xl overflow-hidden origin-top-right z-50 border border-gray-100"
           >
-            <svg class="w-5 h-5 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-            </svg>
-            <span class="absolute -bottom-10 left-1/2 -translate-x-1/2 px-2 py-1 bg-zinc-900 border border-white/10 rounded text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">历史记录</span>
-          </button>
-
-          <!-- 保存按钮 -->
-          <button 
-            @click="$emit('save')"
-            class="p-2.5 rounded-lg bg-zinc-100 border border-zinc-200 hover:bg-zinc-200 hover:border-zinc-300 text-zinc-500 hover:text-zinc-800 transition-all duration-200 group relative"
-            title="保存到本地"
-          >
-            <svg class="w-5 h-5 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/>
-            </svg>
-            <span class="absolute -bottom-10 left-1/2 -translate-x-1/2 px-2 py-1 bg-zinc-900 border border-white/10 rounded text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">保存代码</span>
-          </button>
-
-          <!-- 运行按钮（高可见性） -->
-          <button 
-            @click="$emit('run')"
-            :disabled="loading"
-            class="bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white px-3 sm:px-6 py-2 sm:py-2.5 rounded-xl font-bold shadow-lg shadow-emerald-900/50 hover:shadow-emerald-900/70 transition-all duration-300 transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center gap-2 ring-1 ring-white/10"
-          >
-            <template v-if="loading">
-              <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              <span class="hidden sm:inline">运行中...</span>
-            </template>
-            <template v-else>
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-              </svg>
-              <span class="hidden sm:inline">运行代码</span>
-            </template>
-          </button>
-
-          <!-- User Menu -->
-          <div class="relative ml-2" ref="userMenuRef">
-            <button 
-              @click="showUserMenu = !showUserMenu"
-              class="flex items-center gap-2 px-3 py-2 rounded-lg bg-zinc-100 border border-zinc-200 hover:bg-zinc-200 hover:border-zinc-300 transition-all duration-200"
-            >
-              <!-- 头像已移除 -->
-              <span class="text-sm font-medium text-zinc-700 hidden sm:inline">{{ user?.username || '用户' }}</span>
-              <svg class="w-3.5 h-3.5 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-              </svg>
-            </button>
-
-            <!-- 下拉菜单 -->
-            <Transition name="dropdown">
-              <div 
-                v-if="showUserMenu"
-                class="absolute right-0 mt-3 w-56 bg-zinc-900/95 backdrop-blur-xl rounded-xl border border-white/10 shadow-2xl overflow-hidden origin-top-right z-50 ring-1 ring-black/5"
+            <div class="px-4 py-3 border-b border-gray-100 bg-gray-50">
+              <p class="text-sm font-semibold text-gray-900">{{ user?.username }}</p>
+              <p class="text-xs text-gray-500 mt-0.5 flex items-center gap-1.5">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Online
+              </p>
+            </div>
+            <div class="p-1">
+              <button 
+                @click="handleLogout"
+                class="w-full px-3 py-2 text-left text-sm text-red-500 hover:bg-red-50 hover:text-red-600 rounded-lg flex items-center gap-2.5 transition-colors"
               >
-                <div class="px-5 py-4 border-b border-white/10 bg-white/5">
-                  <p class="text-sm font-bold text-white">{{ user?.username }}</p>
-                  <p class="text-xs text-zinc-400 mt-0.5 flex items-center gap-1.5">
-                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> 在线
-                  </p>
-                </div>
-                <div class="p-1">
-                  <button 
-                    @click="handleLogout"
-                    class="w-full px-3 py-2.5 text-left text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 rounded-lg flex items-center gap-2.5 transition-colors"
-                  >
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
-                    </svg>
-                    退出登录
-                  </button>
-                </div>
-              </div>
-            </Transition>
+                <i class="ph ph-sign-out text-lg"></i>
+                退出登录
+              </button>
+            </div>
           </div>
-        </div>
+        </Transition>
       </div>
     </div>
   </header>
@@ -125,10 +115,14 @@ const props = defineProps({
   loading: {
     type: Boolean,
     default: false
+  },
+  sidebarOpen: {
+    type: Boolean,
+    default: false
   }
 })
 
-const emit = defineEmits(['update:currentLanguage', 'run', 'save', 'toggle-history'])
+const emit = defineEmits(['update:currentLanguage', 'run', 'save', 'toggle-history', 'toggle-sidebar'])
 
 const router = useRouter()
 const { user, logout } = useAuth()
@@ -136,7 +130,7 @@ const { user, logout } = useAuth()
 const showUserMenu = ref(false)
 const userMenuRef = ref(null)
 
-// 为 v-model 绑定创建计算属性
+// v-model 绑定的计算属性
 const internalLanguage = computed({
   get: () => props.currentLanguage,
   set: (value) => emit('update:currentLanguage', value)

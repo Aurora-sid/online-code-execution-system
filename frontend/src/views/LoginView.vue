@@ -1,35 +1,34 @@
 <template>
-  <div class="min-h-screen w-full bg-[#0F172A] text-slate-200 flex items-center justify-center font-sans selection:bg-cyan-500/30 relative overflow-hidden">
-    <!-- Background Effects -->
+  <div class="min-h-screen w-full bg-[#0F172A] text-slate-200 flex items-center justify-center font-sans selection:bg-cyan-500/30 relative overflow-hidden pb-15">
+    <!-- 背景特效 -->
     <div class="absolute inset-0 z-0">
-      <!-- Gradient Blobs -->
+      <!-- 渐变光斑 -->
       <!-- <div class="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-cyan-500/20 rounded-full blur-[120px] animate-pulse"></div>
       <div class="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-blue-600/20 rounded-full blur-[120px] animate-pulse" style="animation-delay: 2s"></div> -->
       <!-- <img :src="loginBg" alt="Background" class="w-full h-full object-cover opacity-80" /> -->
-      <img src="../assets/login.png" alt="Background" class="w-full h-full object-cover opacity-60" />
-      <!-- Grid Overlay (Optional for tech feel) -->
+      <img src="../assets/login.webp" alt="Background" class="w-full h-full object-cover opacity-60" />
+      <!-- 网格覆盖层（科技感装饰） -->
       <div class="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:50px_50px] opacity-20"></div>
     </div>
 
-    <!-- Card Container -->
+    <!-- 卡片容器 -->
     <div class="relative z-10 w-full max-w-md mx-4">
 
-      <!-- Logo -->
+      <!-- Logo 区域 -->
       <div class="flex flex-col items-center justify-center mb-8 gap-4 group">
-        <div class="w-16 h-16 bg-gradient-to-br from-cyan-400 to-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-cyan-500/30 group-hover:scale-105 transition-transform duration-500 ring-1 ring-white/20">
-          <svg class="w-9 h-9 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
-          </svg>
+        <div class="w-20 h-20 bg-gradient-to-br from-cyan-400 to-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-cyan-500/30 group-hover:scale-105 transition-transform duration-500 ring-1 ring-white/20 overflow-hidden">
+          <img src="../assets/Dog.png" alt="Logo" class="w-full h-full object-cover">
         </div>
-        <h1 class="text-4xl font-bold font-mono tracking-tight text-white drop-shadow-sm">
-          Aurora<span class="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">Code</span>
+        <!-- <h1 class="text-6xl text-white drop-shadow-lg mt-2 font-normal" style="font-family: 'Zhi Mang Xing', cursive;"> -->
+          <h1 class="text-6xl text-white drop-shadow-lg mt-2 font-bold" style="font-family: 'Ma Shan Zheng', cursive;">
+          <span class="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 pl-[0.1em]">在线编程系统</span>
         </h1>
       </div>
 
-      <!-- Card Container -->
+      <!-- 卡片容器 -->
       <div class="bg-slate-900/50 backdrop-blur-xl rounded-3xl border border-white/20 shadow-2xl overflow-hidden">
         
-        <!-- Tabs (Segmented Control Style) -->
+        <!-- 标签页（分段控制风格） -->
         <div class="p-6 pb-0">
           <div class="flex bg-black/20 p-1.5 rounded-2xl gap-2">
             <button 
@@ -57,9 +56,9 @@
           </div>
         </div>
 
-        <!-- Form -->
+        <!-- 表单 -->
         <form @submit.prevent="handleSubmit" class="min-h-[360px] p-6 pt-6 space-y-6">
-          <!-- Username -->
+          <!-- 用户名 -->
           <div class="space-y-2">
             <label class="text-sm font-semibold text-slate-300 flex items-center gap-2 ml-1">
               <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -79,7 +78,7 @@
             </div>
           </div>
 
-          <!-- Password -->
+          <!-- 密码 -->
           <div class="space-y-2">
             <label class="text-sm font-semibold text-slate-300 flex items-center gap-2 ml-1">
               <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -112,7 +111,7 @@
             </div>
           </div>
 
-          <!-- Confirm Password (Register Only) -->
+          <!-- 确认密码（仅注册） -->
           <div v-if="activeTab === 'register'" class="space-y-2">
             <label class="text-sm font-semibold text-slate-300 flex items-center gap-2 ml-1">
               <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -132,7 +131,7 @@
             </div>
           </div>
 
-          <!-- Error Message -->
+          <!-- 错误消息 -->
           <div v-if="error" class="bg-red-500/10 border border-red-500/20 rounded-xl p-4 flex items-center gap-3 animate-in fade-in slide-in-from-top-1">
             <svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
@@ -140,7 +139,7 @@
             <span class="text-red-200 text-sm font-medium">{{ error }}</span>
           </div>
 
-          <!-- Success Message -->
+          <!-- 成功消息 -->
           <div v-if="success" class="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 flex items-center gap-3 animate-in fade-in slide-in-from-top-1">
             <svg class="w-5 h-5 text-emerald-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
@@ -148,7 +147,7 @@
             <span class="text-emerald-200 text-sm font-medium">{{ success }}</span>
           </div>
 
-          <!-- Submit Button -->
+          <!-- 提交按钮 -->
           <button 
             type="submit"
             :disabled="loading"
@@ -162,7 +161,7 @@
           </button>
         </form>
 
-        <!-- Footer -->
+        <!-- 底部 -->
         <div class="px-8 pb-8 text-center bg-black/10 pt-4 border-t border-white/5">
           <p class="text-slate-400 text-sm">
             {{ activeTab === 'login' ? '还没有账号？' : '已有账号？' }}
@@ -184,7 +183,7 @@ import { ref, reactive, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import api from '../api'
 import { useAuth } from '../stores/auth'
-import loginBg from '../assets/login.png'
+import loginBg from '../assets/login.webp'
 
 const router = useRouter()
 const route = useRoute()
@@ -192,7 +191,7 @@ const { login } = useAuth()
 
 const activeTab = ref('login')
 watch(activeTab, () => {
-  // Always clear form when switching tabs, especially ensuring register starts empty
+  // 切换标签页时始终清空表单，尤其是确保注册表单为空
   form.username = ''
   form.password = ''
   form.confirmPassword = ''
@@ -202,6 +201,7 @@ watch(activeTab, () => {
 const loading = ref(false)
 const error = ref('')
 const success = ref('')
+const showPassword = ref(false)
 
 const form = reactive({
   username: '',
@@ -210,19 +210,19 @@ const form = reactive({
 })
 
 onMounted(() => {
-  // Clear any persistent state and handle last user from logout
+  // 清除持久状态并处理登出后的上一个用户
   form.username = route.query.lastUser || ''
   form.password = ''
   form.confirmPassword = ''
 })
 
-// Password min length check above uses local validation only
+// 密码最小长度检查仅使用本地验证
 
 const handleSubmit = async () => {
   error.value = ''
   success.value = ''
   
-  // Validation
+  // 验证
   if (activeTab.value === 'register' && form.password !== form.confirmPassword) {
     error.value = '两次输入的密码不一致'
     return

@@ -1,84 +1,96 @@
 <template>
-  <div class="h-screen w-full bg-zinc-900 text-zinc-200 flex flex-col font-sans selection:bg-cyan-500/30 overflow-hidden relative">
-    <!-- Aurora Background Effects -->
-    <div class="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
-      <!-- 静态背景图片（性能优化） -->
-      <img src="../assets/login.png" alt="Background" class="w-full h-full object-cover opacity-20" />
-      
-      <!-- 网格覆盖层 -->
-      <div class="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:50px_50px] opacity-20"></div>
-    </div>
-
-    <!-- 头部：固定高度 -->
+  <div 
+    class="h-screen w-full bg-cover bg-center bg-no-repeat flex flex-col font-sans selection:bg-primary/20 overflow-hidden relative transition-all duration-300"
+    :style="{ backgroundImage: `url(${backgroundImage})` }"
+  >
+    <!-- 顶部导航栏 -->
     <AppHeader 
       v-model:currentLanguage="currentLanguage"
       :loading="loading"
+      :sidebarOpen="!sidebarCollapsed"
       @run="runCode"
       @save="saveToLocal"
       @toggle-history="showHistory = !showHistory"
+      @toggle-sidebar="sidebarCollapsed = !sidebarCollapsed"
       class="flex-none z-10 relative"
     />
 
-    <!-- 主要内容：填充剩余空间 -->
-    <main class="flex-1 flex flex-col min-h-0 p-6 z-10 relative">
-      <!-- 网格容器：填充主要内容 -->
-      <div class="flex-1 w-full mx-auto grid grid-rows-[minmax(0,1fr)_300px] gap-6">
-        
-        <!-- 编辑器部分 -->
-        <div class="bg-zinc-900/60 backdrop-blur-md rounded-2xl border border-white/10 shadow-2xl overflow-hidden flex flex-col group hover:border-white/20 transition-all duration-300 min-h-0 relative ring-1 ring-white/5">
-          <!-- 编辑器标题栏 -->
-          <div class="bg-black/40 px-4 py-3 border-b border-white/5 flex items-center justify-between flex-none">
-            <div class="flex items-center gap-3">
-              <div class="flex gap-2">
-                <div class="w-3 h-3 rounded-full bg-red-500/90 shadow-sm"></div>
-                <div class="w-3 h-3 rounded-full bg-yellow-500/90 shadow-sm"></div>
-                <div class="w-3 h-3 rounded-full bg-green-500/90 shadow-sm"></div>
-              </div>
-              <div class="h-4 w-[1px] bg-white/10 mx-1"></div>
-              <span class="text-sm font-medium text-zinc-400 font-mono flex items-center gap-2">
-                <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                </svg>
-                {{ currentFile }}
-              </span>
-            </div>
-            <div class="flex items-center gap-2">
-               <span class="text-xs text-zinc-500 font-mono px-2 py-1 rounded bg-white/5">online-code-system</span>
-            </div>
-          </div>
-          <!-- 编辑器组件 -->
-          <div class="flex-1 min-h-0 relative">
-             <CodeEditor v-model="code" :language="currentLanguage" />
+    <!-- 主工作区 -->
+    <main class="flex-1 flex overflow-hidden min-h-0">
+      <!-- 侧边栏切换按钮 -->
+      <button
+        @click="sidebarCollapsed = !sidebarCollapsed"
+        class="absolute left-0 top-1/2 -translate-y-1/2 z-20 p-1.5 bg-white/80 hover:bg-white border border-gray-200 rounded-r-lg shadow-md transition-all hover:scale-105"
+        :class="sidebarCollapsed ? 'md:hidden' : 'hidden'"
+        title="展开侧边栏"
+      >
+        <i class="ph ph-caret-right text-gray-600"></i>
+      </button>
+
+      <!-- 侧边栏 -->
+      <Sidebar 
+        :activeFile="currentFilePath"
+        :collapsed="sidebarCollapsed"
+        @open-file="handleOpenFile"
+      />
+
+      <!-- 编辑器区域 -->
+      <section class="flex-1 flex flex-col min-w-0">
+        <!-- 标签页 -->
+        <!-- <EditorTabs 
+          :files="files"
+          :activeFile="activeFileName"
+          @select-file="handleFileSelect"
+        /> -->
+
+        <!-- 代码编辑器 -->
+        <div ref="editorContainer" class="relative bg-[#0c0c0e]/70 transition-all duration-300" :style="{ height: terminalCollapsed ? (editorHeight + terminalHeight - 32) + 'px' : editorHeight + 'px' }">
+          <CodeEditor v-model="code" :language="currentLanguage" :fontSize="editorFontSize" />
+        </div>
+
+        <!-- 可拖动分割线 -->
+        <div 
+          @mousedown="startDragging"
+          class="h-0.1 bg-gray-300/20 hover:bg-primary cursor-row-resize transition-colors relative group"
+          :class="{ 'bg-primary': isDragging }"
+        >
+          <div class="absolute inset-0 flex items-center justify-center">
+            <div class="w-12 h-0.5 bg-gray-400 group-hover:bg-primary rounded-full transition-colors"></div>
           </div>
         </div>
 
-        <!-- 终端部分 -->
-        <div class="bg-zinc-900/60 backdrop-blur-md rounded-2xl border border-white/10 shadow-2xl overflow-hidden flex flex-col group hover:border-white/20 transition-all duration-300 min-h-0 relative ring-1 ring-white/5">
-          <div class="bg-black/40 px-4 py-2.5 border-b border-white/5 flex items-center justify-between flex-none">
-            <div class="flex items-center gap-2">
-              <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-              </svg>
-              <span class="text-xs font-bold text-zinc-300 tracking-wider">终端</span>
-              <!-- <span class="text-xs font-bold text-zinc-300 tracking-wider">终端 | TERMINAL</span> -->
-            </div>
-            <div class="flex gap-1.5">
-               <div class="w-1.5 h-1.5 rounded-full bg-emerald-500/50 animate-pulse"></div>
-            </div>
-          </div>
-          <Terminal ref="terminalRef" class="flex-1 min-h-0" />
+        <!-- 终端面板 -->
+        <div 
+          ref="terminalContainer"
+          class="flex flex-col bg-gray-900/70 transition-all duration-300"
+          :style="{ height: terminalCollapsed ? '32px' : terminalHeight + 'px' }"
+        >
+          <Terminal 
+            ref="terminalRef" 
+            :fontSize="terminalFontSize"
+            :collapsed="terminalCollapsed"
+            @toggle-collapse="terminalCollapsed = !terminalCollapsed"
+            @send-input="handleTerminalInput"
+          />
         </div>
-
-      </div>
+      </section>
     </main>
 
-    <!-- History Panel -->
+    <!-- 状态栏 -->
+    <StatusBar 
+      :line="cursorLine"
+      :column="cursorColumn"
+      :language="languageDisplayName"
+      :errorCount="0"
+    />
+
+    <!-- 历史记录面板 -->
     <HistoryPanel 
       v-model:show="showHistory" 
       @load-code="loadFromHistory"
     />
 
-    <!-- Save Modal -->
+    <!-- 保存模态框 -->
     <SaveModal 
       v-model:show="showSaveModal"
       :defaultName="`aurora_code_${Date.now()}`"
@@ -87,12 +99,10 @@
       @cancel="showSaveModal = false"
     />
 
-    <!-- Save Success Toast -->
+    <!-- 保存成功提示 -->
     <Transition name="toast">
-      <div v-if="showSaveToast" class="fixed bottom-6 right-6 bg-green-500/90 backdrop-blur text-white px-6 py-3 rounded-lg shadow-2xl flex items-center gap-3 z-50">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-        </svg>
+      <div v-if="showSaveToast" class="fixed bottom-8 right-6 bg-success/90 text-white px-5 py-2.5 rounded-lg shadow-2xl flex items-center gap-2 z-50 text-sm">
+        <i class="ph ph-check-circle text-lg"></i>
         <span class="font-medium">代码已保存到本地</span>
       </div>
     </Transition>
@@ -100,25 +110,66 @@
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { ref, shallowRef, watch, computed, onMounted, defineAsyncComponent } from 'vue'
 import axios from 'axios'
 import AppHeader from '../components/AppHeader.vue'
 import CodeEditor from '../components/CodeEditor.vue'
 import Terminal from '../components/Terminal.vue'
-import HistoryPanel from '../components/HistoryPanel.vue'
-import SaveModal from '../components/SaveModal.vue'
+import Sidebar from '../components/Sidebar.vue'
+import EditorTabs from '../components/EditorTabs.vue'
+import StatusBar from '../components/StatusBar.vue'
+import backgroundImage from '@/assets/background.webp'
 import { useAuth } from '../stores/auth'
+
+const HistoryPanel = defineAsyncComponent(() => import('../components/HistoryPanel.vue'))
+const SaveModal = defineAsyncComponent(() => import('../components/SaveModal.vue'))
 
 const { getToken } = useAuth()
 
-const currentLanguage = ref('python')
-const code = ref('print("Hello World")')
+const currentLanguage = ref('go')
+const code = ref('package main\n\nimport "fmt"\n\nfunc main() {\n    fmt.Println("Hello Aurora Code from Go!")\n}')
 const loading = ref(false)
-const terminalRef = ref(null)
+const terminalRef = shallowRef(null)
 const showHistory = ref(false)
 const showSaveModal = ref(false)
 const showSaveToast = ref(false)
 const lastOutput = ref('')
+const sidebarCollapsed = ref(true) // 默认隐藏侧边栏，点击"打开文件夹"后显示
+const isMobile = ref(window.innerWidth < 768) // 小屏幕检测
+const terminalCollapsed = ref(false)
+const terminalHeight = ref(200)
+const editorHeight = ref(400)
+
+// 拖动状态
+const isDragging = ref(false)
+const editorContainer = shallowRef(null)
+const terminalContainer = shallowRef(null)
+
+const editorFontSize = ref(14)
+const terminalFontSize = ref(13)
+const cursorLine = ref(14)
+const cursorColumn = ref(32)
+
+// 当前打开的文件信息
+const currentFilePath = ref('')
+const currentFileHandle = shallowRef(null)
+const isFileModified = ref(false)
+
+// WebSocket 连接（用于交互式输入）
+let currentWebSocket = null
+
+// 侧边栏和标签页的文件列表
+const files = computed(() => {
+  const ext = fileExtensions[currentLanguage.value] || 'txt'
+  return [
+    { name: currentFile.value, type: ext, unsaved: true },
+    { name: 'utils.' + ext, type: ext, unsaved: false },
+    { name: ext === 'go' ? 'go.mod' : 'config.json', type: 'mod', unsaved: false },
+    { name: 'README.md', type: 'md', unsaved: false },
+  ]
+})
+
+const activeFileName = computed(() => currentFile.value)
 
 const currentFile = computed(() => {
   const map = {
@@ -131,6 +182,19 @@ const currentFile = computed(() => {
     javascript: 'main.js',
   }
   return map[currentLanguage.value] || 'script'
+})
+
+const languageDisplayName = computed(() => {
+  const map = {
+    cpp: 'C++',
+    c: 'C',
+    java: 'Java',
+    python: 'Python',
+    pypy: 'PyPy',
+    go: 'Go',
+    javascript: 'JavaScript',
+  }
+  return map[currentLanguage.value] || 'Text'
 })
 
 const fileExtensions = {
@@ -168,11 +232,72 @@ watch(currentLanguage, (newLang) => {
   code.value = snippets[newLang] || ''
 })
 
+// 处理打开文件夹按钮点击
+const handleOpenFolder = async () => {
+  // 显示侧边栏
+  sidebarCollapsed.value = false
+  // 这里可以扩展为调用 File System Access API 打开文件夹
+}
+
+// 处理从侧边栏打开文件
+const handleOpenFile = (fileInfo) => {
+  // 设置文件内容
+  code.value = fileInfo.content
+  currentFilePath.value = fileInfo.path
+  currentFileHandle.value = fileInfo.handle
+  isFileModified.value = false
+  
+  // 根据扩展名设置语言
+  const extToLang = {
+    go: 'go',
+    py: 'python',
+    js: 'javascript',
+    ts: 'typescript',
+    java: 'java',
+    cpp: 'cpp',
+    c: 'c',
+    rs: 'rust',
+    rb: 'ruby',
+    php: 'php',
+    html: 'html',
+    css: 'css',
+    json: 'json',
+    md: 'markdown',
+    vue: 'vue',
+  }
+  
+  const lang = extToLang[fileInfo.extension] || 'plaintext'
+  currentLanguage.value = lang
+  
+  terminalRef.value?.clear()
+  terminalRef.value?.write(`\x1b[32m> 已打开文件: ${fileInfo.name}\x1b[0m\r\n`)
+}
+
+// 监听代码变化，标记修改状态
+watch(code, () => {
+  if (currentFileHandle.value) {
+    isFileModified.value = true
+  }
+})
+
+const handleFileSelect = (file) => {
+  // 目前仅记录日志 - 仅主文件可编辑
+  console.log('Selected file:', file.name)
+}
+
 const runCode = async () => {
   loading.value = true
   lastOutput.value = ''
+  terminalCollapsed.value = false
   terminalRef.value.clear()
+  terminalRef.value.disableInput() // 先禁用输入
   terminalRef.value.write('\r\n\x1b[34m> Compiling and running...\x1b[0m\r\n')
+
+  // 关闭之前的 WebSocket 连接
+  if (currentWebSocket) {
+    currentWebSocket.close()
+    currentWebSocket = null
+  }
 
   try {
     const response = await axios.post('http://localhost:8080/api/run', {
@@ -188,63 +313,126 @@ const runCode = async () => {
     terminalRef.value.write(`\x1b[32m> Task Queued: ${taskId}\x1b[0m\r\n`)
     terminalRef.value.write(`> Waiting for execution...\r\n`)
 
-    // Connect WebSocket
+    // 连接 WebSocket（双向通信）
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const ws = new WebSocket(`${protocol}//localhost:8080/api/ws?taskId=${taskId}`)
+    currentWebSocket = ws
 
     ws.onopen = () => {
       terminalRef.value.write('> Connected to output stream\r\n')
+      // 不再自动启用输入，用户可以通过点击"输入"按钮手动启用
     }
 
     ws.onmessage = (event) => {
-      lastOutput.value += event.data
-      terminalRef.value.write(event.data)
+      try {
+        const msg = JSON.parse(event.data)
+        if (msg.type === 'stdout' && msg.data) {
+          // 检查是否是"等待输入"信号
+          if (msg.data.includes('__WAITING_INPUT__')) {
+            // 启用输入框
+            terminalRef.value.enableInput()
+            terminalRef.value.write('\r\n\x1b[33m> 程序正在等待输入...\x1b[0m\r\n')
+            return
+          }
+
+          lastOutput.value += msg.data
+          // 直接写入原始输出（不用 writeln，因为输出可能是部分行）
+          terminalRef.value.write(msg.data.replace(/\n/g, '\r\n'))
+          
+          // 检查是否执行完成
+          if (msg.data.includes('[执行完成]')) {
+            terminalRef.value.disableInput()
+            loading.value = false
+          }
+        }
+      } catch (e) {
+        // 如果不是 JSON，直接写入
+        lastOutput.value += event.data
+        terminalRef.value.write(event.data)
+      }
     }
 
     ws.onerror = (error) => {
-      terminalRef.value.write(`\r\n\x1b[31m> Connection Error: ${error}\x1b[0m\r\n`)
+      terminalRef.value.write(`\r\n\x1b[31m> Connection Error\x1b[0m\r\n`)
+      terminalRef.value.disableInput()
     }
 
     ws.onclose = () => {
       terminalRef.value.write('\r\n\x1b[90m> Connection closed\x1b[0m\r\n')
+      terminalRef.value.disableInput()
+      currentWebSocket = null
+      loading.value = false
+      
+      // 保存运行历史到 localStorage
+      saveRunHistory({
+        filePath: currentFilePath.value || '未命名',
+        code: code.value,
+        language: currentLanguage.value,
+        output: lastOutput.value,
+        timestamp: Date.now()
+      })
     }
     
   } catch (error) {
     terminalRef.value.write(`\r\n\x1b[31mError: ${error.message}\x1b[0m`)
-  } finally {
-    setTimeout(() => { loading.value = false }, 1000)
+    terminalRef.value.disableInput()
+    loading.value = false
+  }
+}
+
+// 处理终端输入
+const handleTerminalInput = (input) => {
+  if (currentWebSocket && currentWebSocket.readyState === WebSocket.OPEN) {
+    // 发送 stdin 消息到后端
+    currentWebSocket.send(JSON.stringify({
+      type: 'stdin',
+      data: input
+    }))
   }
 }
 
 const saveToLocal = async () => {
+  // 始终弹出文件保存对话框，让用户选择路径和文件名
   const ext = fileExtensions[currentLanguage.value] || 'txt'
-  const defaultName = `aurora_code_${Date.now()}`
+  // 使用当前文件名（如果有）或生成默认名称
+  const suggestedName = currentFilePath.value 
+    ? currentFilePath.value.split(/[/\\]/).pop() 
+    : `aurora_code_${Date.now()}.${ext}`
 
-  // 1. Try modern File System Access API
   if ('showSaveFilePicker' in window) {
     try {
-      const handle = await window.showSaveFilePicker({
-        suggestedName: `${defaultName}.${ext}`,
+      const options = {
+        suggestedName: suggestedName,
         types: [{
-          description: `${currentLanguage.value.toUpperCase()} Code`,
-          accept: { [mimeTypes[currentLanguage.value] || 'text/plain']: [`.${ext}`] },
+          description: `${currentLanguage.value.toUpperCase()} Source File`,
+          accept: {
+            'text/plain': [`.${ext}`]
+          }
         }],
-      })
+      }
+      
+      const handle = await window.showSaveFilePicker(options)
       const writable = await handle.createWritable()
       await writable.write(code.value)
       await writable.close()
       
+      // 更新当前文件句柄和路径
+      currentFileHandle.value = handle
+      currentFilePath.value = handle.name
+      isFileModified.value = false
+      
       showSaveToast.value = true
       setTimeout(() => showSaveToast.value = false, 3000)
+      terminalRef.value?.write(`\x1b[32m> 文件已保存: ${handle.name}\x1b[0m\r\n`)
       return
     } catch (err) {
-      // User cancelled or error, don't show modal if user cancelled
-      if (err.name === 'AbortError') return
-      console.error('File Picker Error:', err)
+      if (err.name === 'AbortError') return // 用户取消
+      console.warn('File Picker API failed, falling back to legacy save:', err)
+      // 回退到旧版保存模态框
     }
   }
 
-  // 2. Fallback to custom modal + traditional download
+  // 浏览器不支持 File Picker API，使用旧版模态框
   showSaveModal.value = true
 }
 
@@ -268,12 +456,110 @@ const handleSaveConfirm = (filename) => {
   setTimeout(() => showSaveToast.value = false, 3000)
 }
 
-
 const loadFromHistory = (record) => {
   currentLanguage.value = record.language
   code.value = record.code
   showHistory.value = false
 }
+
+// 保存运行历史到 localStorage
+const saveRunHistory = (record) => {
+  try {
+    const historyKey = 'aurora_run_history'
+    const existingHistory = JSON.parse(localStorage.getItem(historyKey) || '[]')
+    
+    // 添加唯一 ID
+    record.id = `run_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    
+    // 添加到历史记录开头
+    existingHistory.unshift(record)
+    
+    // 限制最多保存 50 条记录
+    if (existingHistory.length > 50) {
+      existingHistory.pop()
+    }
+    
+    localStorage.setItem(historyKey, JSON.stringify(existingHistory))
+  } catch (err) {
+    console.error('保存运行历史失败:', err)
+  }
+}
+
+// 可拖动分割线逻辑
+const startDragging = (e) => {
+  isDragging.value = true
+  document.addEventListener('mousemove', handleDrag)
+  document.addEventListener('mouseup', stopDragging)
+  e.preventDefault()
+}
+
+const handleDrag = (e) => {
+  if (!isDragging.value) return
+  
+  const container = editorContainer.value?.parentElement
+  if (!container) return
+  
+  const containerRect = container.getBoundingClientRect()
+  const newEditorHeight = e.clientY - containerRect.top
+  const totalHeight = containerRect.height
+  
+  // 最小高度
+  const minEditorHeight = 150
+  const minTerminalHeight = 100
+  
+  if (newEditorHeight >= minEditorHeight && (totalHeight - newEditorHeight - 4) >= minTerminalHeight) {
+    editorHeight.value = newEditorHeight
+    terminalHeight.value = totalHeight - newEditorHeight - 4 // 4px for divider
+    
+    // 根据新高度更新字体大小
+    updateFontSizes()
+  }
+}
+
+const stopDragging = () => {
+  isDragging.value = false
+  document.removeEventListener('mousemove', handleDrag)
+  document.removeEventListener('mouseup', stopDragging)
+}
+
+// 根据容器高度计算字体大小
+const calculateFontSize = (height, min = 10, max = 20) => {
+  // 公式：fontSize = height / 30，限制在 min 和 max 之间
+  const calculated = Math.floor(height / 30)
+  return Math.max(min, Math.min(max, calculated))
+}
+
+const updateFontSizes = () => {
+  editorFontSize.value = calculateFontSize(editorHeight.value, 12, 20)
+  terminalFontSize.value = calculateFontSize(terminalHeight.value, 11, 16)
+}
+
+// 挂载时初始化高度
+onMounted(() => {
+  // 根据可用空间计算初始高度
+  const container = editorContainer.value?.parentElement
+  if (container) {
+    const totalHeight = container.clientHeight
+    editorHeight.value = Math.floor(totalHeight * 0.65) // 65% for editor
+    terminalHeight.value = Math.floor(totalHeight * 0.35) - 4 // 35% for terminal, minus divider
+    updateFontSizes()
+  }
+  
+  // 窗口调整大小时更新
+  window.addEventListener('resize', () => {
+    // 更新移动端检测
+    isMobile.value = window.innerWidth < 768
+    
+    const container = editorContainer.value?.parentElement
+    if (container) {
+      const totalHeight = container.clientHeight
+      const ratio = editorHeight.value / (editorHeight.value + terminalHeight.value + 4)
+      editorHeight.value = Math.floor(totalHeight * ratio)
+      terminalHeight.value = totalHeight - editorHeight.value - 4
+      updateFontSizes()
+    }
+  })
+})
 </script>
 
 <style scoped>

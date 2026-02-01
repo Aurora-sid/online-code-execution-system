@@ -9,10 +9,12 @@ import (
 )
 
 type Task struct {
-	ID       string `json:"id"`
-	Language string `json:"language"`
-	Code     string `json:"code"`
-	UserID   uint   `json:"user_id"`
+	ID           string `json:"id"`
+	Language     string `json:"language"`
+	Code         string `json:"code"`
+	Input        string `json:"input"` // 标准输入数据
+	UserID       uint   `json:"user_id"`
+	SubmissionID uint   `json:"submission_id"`
 }
 
 type Producer struct {

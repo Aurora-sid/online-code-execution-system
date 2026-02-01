@@ -1,7 +1,9 @@
-FROM python:alpine
 
-# Install build dependencies if strictly necessary, but keep it minimal for runtime
-# For simple scripts, python:alpine is enough.
+FROM python:3.9-slim
+
+# Install dependencies for matplotlib
+RUN pip install --no-cache-dir numpy matplotlib
+
 WORKDIR /app
 
 # The container will stay alive waiting for exec commands

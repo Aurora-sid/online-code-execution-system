@@ -1,8 +1,8 @@
 <template>
   <Transition name="fade">
-    <div v-if="show" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+    <div v-if="show" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60">
       <div 
-        class="w-full max-w-md bg-surface/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden transform transition-all"
+        class="w-full max-w-md bg-surface/90 border border-white/10 rounded-2xl shadow-2xl overflow-hidden transform transition-all"
         @click.stop
       >
         <!-- Header -->

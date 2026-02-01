@@ -9,6 +9,7 @@ require (
 	github.com/gorilla/websocket v1.5.0
 	github.com/redis/go-redis/v9 v9.0.5
 	golang.org/x/crypto v0.44.0
+	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/mysql v1.5.1
 	gorm.io/gorm v1.25.1
 )
@@ -62,7 +63,6 @@ require (
 	golang.org/x/text v0.31.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gotest.tools/v3 v3.5.2 // indirect
 )
 

@@ -1,62 +1,49 @@
 <template>
-  <div class="relative" ref="dropdownRef">
-    <!-- 触发按钮 -->
-    <button
-      @click="toggleDropdown"
-      type="button"
-      class="flex items-center gap-3 bg-zinc-100 border border-zinc-200 rounded-lg px-4 py-2 text-zinc-700 hover:bg-zinc-200 hover:border-zinc-300 focus:outline-none focus:ring-2 focus:ring-accent-purple/50 cursor-pointer transition-all duration-200 min-w-[140px]"
-      :class="{ 'ring-2 ring-accent-purple/50 border-accent-purple/50': isOpen }"
+  <div class="relative" ref="selectorRef">
+    <!-- Trigger Button -->
+    <button 
+      @click="toggleDropdown($event)"
+      class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 hover:from-indigo-100 hover:via-purple-100 hover:to-pink-100 border border-indigo-100/50 transition-all active:scale-95 hover:scale-105"
     >
-      <!-- 当前语言图标 -->
-      <img :src="currentLangIcon" class="w-5 h-5 flex-shrink-0 object-contain" />
-      <span class="font-medium flex-1 text-left">{{ currentLangLabel }}</span>
-      <!-- 箭头图标 -->
-      <svg 
-        class="w-4 h-4 text-zinc-500 transition-transform duration-200" 
-        :class="{ 'rotate-180': isOpen }"
-        fill="none" stroke="currentColor" viewBox="0 0 24 24"
-      >
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-      </svg>
+      <img 
+        v-if="currentLang?.icon && !currentLang.icon.startsWith('ph')" 
+        :src="getIconUrl(currentLang.icon)" 
+        class="w-6 h-6 object-contain" 
+        alt="icon"
+      />
+      <i v-else :class="currentLangIcon" class="text-lg"></i>
+      <span class="text-sm font-medium text-gray-700">{{ currentLangLabel }}</span>
+      <!-- <i :class="isOpen ? 'ph ph-caret-up' : 'ph ph-caret-down'" class="text-xs text-gray-500 ml-1"></i> -->
     </button>
 
-    <!-- 下拉菜单 -->
-    <Transition
-      enter-active-class="transition ease-out duration-150"
-      enter-from-class="opacity-0 scale-95 -translate-y-1"
-      enter-to-class="opacity-100 scale-100 translate-y-0"
-      leave-active-class="transition ease-in duration-100"
-      leave-from-class="opacity-100 scale-100 translate-y-0"
-      leave-to-class="opacity-0 scale-95 -translate-y-1"
-    >
+    <!-- Dropdown -->
+    <Transition name="dropdown">
       <div 
-        v-if="isOpen"
-        class="absolute top-full left-0 mt-2 w-full bg-white border border-zinc-200 rounded-lg shadow-xl shadow-black/10 overflow-hidden z-50"
+        v-if="isOpen" 
+        class="absolute top-full left-0 mt-2 w-48 bg-white rounded-xl shadow-2xl overflow-hidden z-50 border border-gray-100"
       >
-        <!-- 加载中状态 -->
-        <div v-if="loading" class="flex items-center justify-center py-4">
-          <svg class="animate-spin h-5 w-5 text-accent-purple" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
+        <div class="max-h-64 overflow-y-auto py-1">
+          <button
+            v-for="lang in languages"
+            :key="lang.value"
+            @click="selectLanguage(lang.value)"
+            class="w-full px-3 py-2 flex items-center gap-2.5 text-left hover:bg-gray-50 transition-colors"
+            :class="modelValue === lang.value ? 'bg-primary/5 text-primary' : 'text-gray-600'"
+          >
+            <img 
+              v-if="lang.icon && !lang.icon.startsWith('ph')" 
+              :src="getIconUrl(lang.icon)" 
+              class="w-5 h-5 object-contain"
+              alt="icon"
+            />
+            <i v-else :class="lang.icon" class="text-lg"></i>
+            <span class="text-sm font-medium">{{ lang.label }}</span>
+            <i 
+              v-if="modelValue === lang.value" 
+              class="ph ph-check ml-auto text-primary"
+            ></i>
+          </button>
         </div>
-        <!-- 语言列表 -->
-        <button
-          v-else
-          v-for="lang in languages"
-          :key="lang.value"
-          @click="selectLanguage(lang.value)"
-          @mouseenter="hoveredValue = lang.value"
-          @mouseleave="hoveredValue = null"
-          class="flex items-center gap-3 w-full px-4 py-2.5 text-left cursor-pointer transition-colors"
-          :class="[
-            modelValue === lang.value ? 'bg-accent-purple/10 text-accent-purple' : 'text-zinc-700',
-            hoveredValue === lang.value && modelValue !== lang.value ? 'bg-zinc-100 text-zinc-900' : ''
-          ]"
-        >
-          <img :src="getIconUrl(lang.icon)" class="w-5 h-5 flex-shrink-0 object-contain" />
-          <span class="font-medium">{{ lang.label }}</span>
-        </button>
       </div>
     </Transition>
   </div>
@@ -64,7 +51,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { fetchLanguages } from '../api'
+import axios from 'axios'
 
 const props = defineProps({
   modelValue: {
@@ -76,43 +63,39 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue'])
 
 const isOpen = ref(false)
-const hoveredValue = ref(null)
-const dropdownRef = ref(null)
-const loading = ref(false)
+const selectorRef = ref(null)
 const languages = ref([])
 
-// 图标映射 - 用于加载本地图标
-const iconModules = import.meta.glob('../assets/icons/*.png', { eager: true })
-
-// 根据图标文件名获取图标路径
-const getIconUrl = (iconName) => {
-  const path = `../assets/icons/${iconName}`
-  return iconModules[path]?.default || ''
+const languageIcons = {
+  go: 'ph ph-file-code text-cyan-500',
+  python: 'ph ph-file-py text-blue-500',
+  java: 'ph ph-file-code text-orange-500',
+  cpp: 'ph ph-file-cpp text-purple-500',
+  c: 'ph ph-file-c text-blue-600',
+  javascript: 'ph ph-file-js text-yellow-500',
+  typescript: 'ph ph-file-ts text-blue-500',
+  rust: 'ph ph-gear text-orange-600',
+  ruby: 'ph ph-diamond text-red-500',
+  php: 'ph ph-file-code text-indigo-500',
 }
 
-// 从 API 加载语言列表
-const loadLanguages = async () => {
-  loading.value = true
-  try {
-    const data = await fetchLanguages()
-    languages.value = data
-  } catch (error) {
-    console.error('Failed to load languages:', error)
-  } finally {
-    loading.value = false
-  }
-}
+const defaultLanguages = [
+  { value: "go", label: "Go", icon: "ph ph-file-code text-cyan-500" },
+  { value: "python", label: "Python", icon: "ph ph-file-py text-blue-500" },
+  { value: "java", label: "Java", icon: "ph ph-file-code text-orange-500" },
+  { value: "cpp", label: "C++", icon: "ph ph-file-cpp text-purple-500" },
+  { value: "c", label: "C", icon: "ph ph-file-c text-blue-600" },
+]
 
-const currentLangLabel = computed(() => {
-  return languages.value.find(l => l.value === props.modelValue)?.label || 'Select'
+const currentLang = computed(() => {
+  return languages.value.find(l => l.value === props.modelValue) || defaultLanguages[0]
 })
 
-const currentLangIcon = computed(() => {
-  const lang = languages.value.find(l => l.value === props.modelValue)
-  return lang ? getIconUrl(lang.icon) : ''
-})
+const currentLangLabel = computed(() => currentLang.value?.label || 'Go')
+const currentLangIcon = computed(() => currentLang.value?.icon || 'ph ph-file-code text-cyan-500')
 
-const toggleDropdown = () => {
+const toggleDropdown = (event) => {
+  event?.stopPropagation()
   isOpen.value = !isOpen.value
 }
 
@@ -121,19 +104,77 @@ const selectLanguage = (value) => {
   isOpen.value = false
 }
 
-// 点击外部关闭下拉菜单
+const getIconUrl = (iconName) => {
+  if (!iconName) return ''
+  try {
+    return new URL(`../assets/icons/${iconName}`, import.meta.url).href
+  } catch (e) {
+    return ''
+  }
+}
+
+const fetchLanguages = async () => {
+  try {
+    const response = await axios.get('/api/languages')
+    // API returns { languages: [...] }
+    const langs = response.data?.languages || response.data
+    
+    if (langs && Array.isArray(langs) && langs.length > 0) {
+      languages.value = langs.map(lang => ({
+        value: lang.value,
+        label: lang.label,
+        icon: lang.icon // API returns filename like "go.png"
+      }))
+    } else {
+      console.warn('API returned empty languages, using defaults')
+      languages.value = defaultLanguages
+    }
+  } catch (error) {
+    console.warn('Failed to fetch languages, using defaults:', error)
+    languages.value = defaultLanguages
+  }
+}
+
+// Click outside to close
 const handleClickOutside = (event) => {
-  if (dropdownRef.value && !dropdownRef.value.contains(event.target)) {
+  if (selectorRef.value && !selectorRef.value.contains(event.target)) {
     isOpen.value = false
   }
 }
 
 onMounted(() => {
+  fetchLanguages()
   document.addEventListener('click', handleClickOutside)
-  loadLanguages()
 })
 
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
 })
 </script>
+
+<style scoped>
+.dropdown-enter-active,
+.dropdown-leave-active {
+  transition: all 0.2s ease;
+}
+.dropdown-enter-from,
+.dropdown-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+/* Custom scrollbar for light theme */
+.max-h-64::-webkit-scrollbar {
+  width: 6px;
+}
+.max-h-64::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+.max-h-64::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+.max-h-64::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+</style>

@@ -7,22 +7,32 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
       MYSQL_DATABASE: code_exec
+      MYSQL_USER: codeexec
+      MYSQL_PASSWORD: codeexec123
     ports:
       - "13306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     networks:
       - code_exec_net
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   redis:
-    image: redis:alpine
+    image: redis:7-alpine
     container_name: code_exec_redis
     ports:
       - "16379:6379"
-    volumes:
-      - redis_data:/data
     networks:
       - code_exec_net
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 networks:
   code_exec_net:
@@ -30,4 +40,3 @@ networks:
 
 volumes:
   mysql_data:
-  redis_data:
