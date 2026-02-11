@@ -12,6 +12,7 @@
       @save="saveToLocal"
       @toggle-history="showHistory = !showHistory"
       @toggle-sidebar="sidebarCollapsed = !sidebarCollapsed"
+      @toggle-analysis="showAnalysis = !showAnalysis"
       class="flex-none z-10 relative"
     />
 
@@ -69,6 +70,8 @@
             ref="terminalRef" 
             :fontSize="terminalFontSize"
             :collapsed="terminalCollapsed"
+            :code="code"
+            :language="currentLanguage"
             @toggle-collapse="terminalCollapsed = !terminalCollapsed"
             @send-input="handleTerminalInput"
           />
@@ -90,6 +93,20 @@
       @load-code="loadFromHistory"
     />
 
+    <!-- AI 分析面板 -->
+    <Transition name="slide-right">
+      <div 
+        v-if="showAnalysis" 
+        class="fixed right-0 top-14 bottom-6 w-96 max-w-full z-40 shadow-2xl border-l border-gray-200"
+      >
+        <AnalysisPanel 
+          :code="code" 
+          :language="currentLanguage"
+          @close="showAnalysis = false"
+        />
+      </div>
+    </Transition>
+
     <!-- 保存模态框 -->
     <SaveModal 
       v-model:show="showSaveModal"
@@ -110,27 +127,30 @@
 </template>
 
 <script setup>
-import { ref, shallowRef, watch, computed, onMounted, defineAsyncComponent } from 'vue'
-import axios from 'axios'
+import { ref, shallowRef, watch, computed, onMounted, onBeforeUnmount, defineAsyncComponent } from 'vue'
 import AppHeader from '../components/AppHeader.vue'
 import CodeEditor from '../components/CodeEditor.vue'
 import Terminal from '../components/Terminal.vue'
 import Sidebar from '../components/Sidebar.vue'
-import EditorTabs from '../components/EditorTabs.vue'
+
 import StatusBar from '../components/StatusBar.vue'
 import backgroundImage from '@/assets/background.webp'
-import { useAuth } from '../stores/auth'
+import { runCode as apiRunCode, getWebSocketURL } from '../api'
+import { useEditorStore } from '../stores/editor'
 
 const HistoryPanel = defineAsyncComponent(() => import('../components/HistoryPanel.vue'))
 const SaveModal = defineAsyncComponent(() => import('../components/SaveModal.vue'))
+const AnalysisPanel = defineAsyncComponent(() => import('../components/AnalysisPanel.vue'))
 
-const { getToken } = useAuth()
 
-const currentLanguage = ref('go')
-const code = ref('package main\n\nimport "fmt"\n\nfunc main() {\n    fmt.Println("Hello Aurora Code from Go!")\n}')
+
+const editorStore = useEditorStore()
+const currentLanguage = ref(editorStore.currentLanguage)
+const code = ref(editorStore.codeMap[editorStore.currentLanguage] || editorStore.snippets[editorStore.currentLanguage])
 const loading = ref(false)
 const terminalRef = shallowRef(null)
 const showHistory = ref(false)
+const showAnalysis = ref(false)
 const showSaveModal = ref(false)
 const showSaveToast = ref(false)
 const lastOutput = ref('')
@@ -177,9 +197,12 @@ const currentFile = computed(() => {
     c: 'main.c',
     java: 'Main.java',
     python: 'main.py',
-    pypy: 'main.py',
+
     go: 'main.go',
     javascript: 'main.js',
+    rust: 'main.rs',
+    csharp: 'Program.cs',
+    typescript: 'main.ts',
   }
   return map[currentLanguage.value] || 'script'
 })
@@ -190,9 +213,12 @@ const languageDisplayName = computed(() => {
     c: 'C',
     java: 'Java',
     python: 'Python',
-    pypy: 'PyPy',
+
     go: 'Go',
     javascript: 'JavaScript',
+    rust: 'Rust',
+    csharp: 'C#',
+    typescript: 'TypeScript',
   }
   return map[currentLanguage.value] || 'Text'
 })
@@ -202,9 +228,12 @@ const fileExtensions = {
   c: 'c',
   java: 'java',
   python: 'py',
-  pypy: 'py',
+
   go: 'go',
-  javascript: 'js'
+  javascript: 'js',
+  rust: 'rs',
+  csharp: 'cs',
+  typescript: 'ts'
 }
 
 const mimeTypes = {
@@ -212,9 +241,12 @@ const mimeTypes = {
   c: 'text/x-csrc',
   java: 'text/x-java-source',
   python: 'text/x-python',
-  pypy: 'text/x-python',
+
   go: 'text/x-go',
-  javascript: 'text/javascript'
+  javascript: 'text/javascript',
+  rust: 'text/x-rustsrc',
+  csharp: 'text/x-csharp',
+  typescript: 'text/typescript'
 }
 
 // 默认代码片段
@@ -223,13 +255,17 @@ const snippets = {
   c: '#include <stdio.h>\n\nint main() {\n    printf("Hello Aurora Code from C (gcc8.3.0)!\\n");\n    return 0;\n}',
   java: 'public class Main {\n    public static void main(String[] args) {\n        System.out.println("Hello Aurora Code from Java 11!");\n    }\n}',
   python: 'print("Hello Aurora Code from Python 3.7.3!")',
-  pypy: 'print("Hello Aurora Code from PyPy3 (7.3.8)!")',
+
   go: 'package main\n\nimport "fmt"\n\nfunc main() {\n    fmt.Println("Hello Aurora Code from Go 1.19.5")\n}',
-  javascript: 'console.log("Hello Aurora Code from JavaScript (Node.js)!");'
+  javascript: 'console.log("Hello Aurora Code from JavaScript (Node.js)!");',
+  rust: 'fn main() {\n    println!("Hello Aurora Code from Rust!");\n}',
+  csharp: 'using System;\n\nclass Program {\n    static void Main() {\n        Console.WriteLine("Hello Aurora Code from C# (.NET 8)!");\n    }\n}',
+  typescript: 'const msg: string = "Hello Aurora Code from TypeScript!";\nconsole.log(msg);'
 }
 
 watch(currentLanguage, (newLang) => {
-  code.value = snippets[newLang] || ''
+  editorStore.currentLanguage = newLang
+  code.value = editorStore.codeMap[newLang] || editorStore.snippets[newLang] || ''
 })
 
 // 处理打开文件夹按钮点击
@@ -274,7 +310,8 @@ const handleOpenFile = (fileInfo) => {
 }
 
 // 监听代码变化，标记修改状态
-watch(code, () => {
+watch(code, (newCode) => {
+  editorStore.updateCode(currentLanguage.value, newCode)
   if (currentFileHandle.value) {
     isFileModified.value = true
   }
@@ -291,7 +328,9 @@ const runCode = async () => {
   terminalCollapsed.value = false
   terminalRef.value.clear()
   terminalRef.value.disableInput() // 先禁用输入
+  editorStore.clearOutput() // 清除持久化的输出
   terminalRef.value.write('\r\n\x1b[34m> Compiling and running...\x1b[0m\r\n')
+  editorStore.appendOutput('\r\n\x1b[34m> Compiling and running...\x1b[0m\r\n')
 
   // 关闭之前的 WebSocket 连接
   if (currentWebSocket) {
@@ -300,22 +339,15 @@ const runCode = async () => {
   }
 
   try {
-    const response = await axios.post('http://localhost:8080/api/run', {
-      language: currentLanguage.value,
-      code: code.value
-    }, {
-      headers: {
-        'Authorization': `Bearer ${getToken()}`
-      }
-    })
+    const data = await apiRunCode(currentLanguage.value, code.value)
     
-    const taskId = response.data.taskId
-    terminalRef.value.write(`\x1b[32m> Task Queued: ${taskId}\x1b[0m\r\n`)
-    terminalRef.value.write(`> Waiting for execution...\r\n`)
+    const taskId = data.taskId
+    const queuedMsg = `\x1b[32m> Task Queued: ${taskId}\x1b[0m\r\n> Waiting for execution...\r\n`
+    terminalRef.value.write(queuedMsg)
+    editorStore.appendOutput(queuedMsg)
 
     // 连接 WebSocket（双向通信）
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const ws = new WebSocket(`${protocol}//localhost:8080/api/ws?taskId=${taskId}`)
+    const ws = new WebSocket(getWebSocketURL(taskId))
     currentWebSocket = ws
 
     ws.onopen = () => {
@@ -337,7 +369,9 @@ const runCode = async () => {
 
           lastOutput.value += msg.data
           // 直接写入原始输出（不用 writeln，因为输出可能是部分行）
-          terminalRef.value.write(msg.data.replace(/\n/g, '\r\n'))
+          const outText = msg.data.replace(/\n/g, '\r\n')
+          terminalRef.value.write(outText)
+          editorStore.appendOutput(outText)
           
           // 检查是否执行完成
           if (msg.data.includes('[执行完成]')) {
@@ -348,7 +382,9 @@ const runCode = async () => {
       } catch (e) {
         // 如果不是 JSON，直接写入
         lastOutput.value += event.data
-        terminalRef.value.write(event.data)
+        const outText = event.data.replace(/\n/g, '\r\n')
+        terminalRef.value.write(outText)
+        editorStore.appendOutput(outText)
       }
     }
 
@@ -534,6 +570,21 @@ const updateFontSizes = () => {
   terminalFontSize.value = calculateFontSize(terminalHeight.value, 11, 16)
 }
 
+// 窗口大小调整处理函数（需要存储引用以便清理）
+const handleWindowResize = () => {
+  // 更新移动端检测
+  isMobile.value = window.innerWidth < 768
+  
+  const container = editorContainer.value?.parentElement
+  if (container) {
+    const totalHeight = container.clientHeight
+    const ratio = editorHeight.value / (editorHeight.value + terminalHeight.value + 4)
+    editorHeight.value = Math.floor(totalHeight * ratio)
+    terminalHeight.value = totalHeight - editorHeight.value - 4
+    updateFontSizes()
+  }
+}
+
 // 挂载时初始化高度
 onMounted(() => {
   // 根据可用空间计算初始高度
@@ -546,19 +597,32 @@ onMounted(() => {
   }
   
   // 窗口调整大小时更新
-  window.addEventListener('resize', () => {
-    // 更新移动端检测
-    isMobile.value = window.innerWidth < 768
-    
-    const container = editorContainer.value?.parentElement
-    if (container) {
-      const totalHeight = container.clientHeight
-      const ratio = editorHeight.value / (editorHeight.value + terminalHeight.value + 4)
-      editorHeight.value = Math.floor(totalHeight * ratio)
-      terminalHeight.value = totalHeight - editorHeight.value - 4
-      updateFontSizes()
-    }
-  })
+  window.addEventListener('resize', handleWindowResize)
+  
+  // 恢复之前运行的输出
+  if (editorStore.terminalOutput) {
+      setTimeout(() => {
+          if (terminalRef.value) {
+              terminalRef.value.write(editorStore.terminalOutput)
+              // Auto-expand terminal if there is content
+              if (terminalCollapsed.value) {
+                  terminalCollapsed.value = false
+              }
+          }
+      }, 100)
+  }
+})
+
+// 组件销毁时清理资源
+onBeforeUnmount(() => {
+  // 移除 resize 监听器
+  window.removeEventListener('resize', handleWindowResize)
+  
+  // 关闭 WebSocket 连接
+  if (currentWebSocket) {
+    currentWebSocket.close(1000, 'Component unmounted')
+    currentWebSocket = null
+  }
 })
 </script>
 
@@ -571,5 +635,16 @@ onMounted(() => {
 .toast-leave-to {
   opacity: 0;
   transform: translateY(20px);
+}
+
+/* AI 分析面板滑入动画 */
+.slide-right-enter-active,
+.slide-right-leave-active {
+  transition: all 0.3s ease;
+}
+.slide-right-enter-from,
+.slide-right-leave-to {
+  opacity: 0;
+  transform: translateX(100%);
 }
 </style>

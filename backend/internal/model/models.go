@@ -7,7 +7,8 @@ import (
 type User struct {
 	ID        uint   `gorm:"primaryKey"`
 	Username  string `gorm:"uniqueIndex;size:50"`
-	Password  string `gorm:"size:255"` // 已哈希
+	Password  string `gorm:"size:255"`                           // 已哈希
+	Role      string `gorm:"size:20;default:'user'" json:"role"` // admin 或 user
 	CreatedAt time.Time
 }
 

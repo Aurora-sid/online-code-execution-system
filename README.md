@@ -1,24 +1,70 @@
-# 在线代码执行平台 - 运行指南
+# Aurora Code - 在线代码执行平台
 
-## 📋 项目简介
-基于 Docker 的多用户在线编程执行系统，支持 Python、Java、C++、Go 四种编程语言的在线编写和执行。
+**Aurora Code** 是一个基于 MicroVM 和容器技术的现代化多语言在线编程平台。它旨在提供一个安全、快速、美观的在线代码执行环境，特别针对数据可视化和交互式编程进行了深度优化。
 
-## 🛠️ 环境要求
-- **Docker Desktop** (必须)
-- **Node.js** 22.12+ (前端开发)
-- **Go** 1.21+ (可选，后端开发)
+## ✨ 核心特性
+
+### 1. 🚀 多语言支持与极速执行
+*   **原生支持**: 目前完美支持 **Go, Python, Java, C++, C, JavaScript (Node.js)**。
+*   **并发队列**: 基于 Redis 的任务队列系统，有效应对高并发提交。
+*   **预热池技术**: 独创容器预热池（Container Pool），将代码执行启动时间降低至 **毫秒级**。
+
+### 2. 🛡️ 企业级 Docker 沙箱
+*   **资源隔离**: 每个任务运行在独立的 Docker 容器中，严格限制 CPU (Quota) 和内存 (Memory Limit)。
+*   **攻击防御**:
+    *   **Anti-Fork Bomb**: 实时监控并拦截进程无限繁衍攻击。
+    *   **Memory Guard**: 智能识别并终止内存耗尽攻击（OOM）。
+    *   **Sensitive IO Block**: 自动拦截对敏感系统文件（如 `/etc/passwd`）的非法读取。
+
+### 3. 🖼️ 数据可视化 (Data Visualization)
+*   **无头环境渲染**: 专为 Matplotlib 等库优化。检测到 GUI 调用（如 `plt.show()`）时自动提示用户。
+*   **智能图片捕获**: 自动捕获容器生成的 `output.png` 图片文件。
+*   **实时预览**: 后端自动转码传输，前端终端可直接点击缩略图查看高清大图，体验接近 Jupyter Notebook。
+
+### 4. ⌨️ 实时交互 (Interactive Mode)
+*   不同于传统的批处理 OJ，Aurora Code 支持**标准输入 (Stdin) 流式交互**。
+*   用户可以在程序运行过程中，通过终端实时发送据，实现真正的“交互式编程”。
+
+### 5. 🎨  UI 设计
+*   **沉浸式体验**: 采用极光深色主题，长时间编程不刺眼。
+*   **专业编辑器**: 集成 Microsoft Monaco Editor（VS Code 核心），支持智能提示、代码高亮。
+*   **超级终端**: 定制版 Xterm.js，支持字体缩放、自适应布局。
 
 ---
 
-## 🚀 快速启动
+## 🛠️ 技术栈
 
-### 1. 启动基础设施 (MySQL + Redis)
+| 领域 | 技术组件 | 说明 |
+| :--- | :--- | :--- |
+| **Backend** | **Go (Golang)** | 高性能核心服务 |
+| | **Gin Gonic** | Web 框架 & WebSocket 处理 |
+| | **Docker Client** | 容器编排与控制 API |
+| | **Redis** | 任务队列 & 缓存 |
+| | **Gorm / MySQL** | 数据持久化 |
+| **Frontend** | **Vue 3** | 渐进式 JavaScript 框架 |
+| | **Vite** | 极速构建工具 |
+| | **Tailwind CSS** | 实用主义 CSS 框架 |
+| | **Monaco Editor** | 代码编辑器核心 |
+| | **Xterm.js** | 网页终端模拟器 |
+
+---
+
+## 🚀 快速开始
+
+### 1. 环境依赖
+*   **Docker Desktop** (必须，用于沙箱环境)
+*   **Node.js 18+** (前端开发)
+*   **Go 1.21+** (后端开发)
+
+### 2. 启动基础设施
+启动 MySQL 和 Redis 服务：
 ```bash
 cd deploy
 docker-compose up -d
 ```
 
-### 2. 构建代码执行环境镜像
+### 3. 构建执行环境镜像
+**注意**: 项目首次运行必须构建沙箱使用的镜像。
 ```bash
 # Python 环境
 docker build -t code-exec/python deploy/images/python
@@ -32,194 +78,187 @@ docker build -t code-exec/cpp deploy/images/cpp
 # Go 环境
 docker build -t code-exec/go deploy/images/go
 ```
+(更多语言请参考 `deploy/images` 目录)
 
-### 3. 启动后端服务
+### 4. 启动后端服务
+您可以在本地直接运行 Go 后端，它会自动连接到 Docker Daemon。
 ```bash
-# 使用 Docker 运行后端（推荐）
-docker run -d --name backend_server \
-  --network deploy_code_exec_net \
-  -p 8080:8080 \
-  -v $(pwd)/backend:/app \
-  -w /app \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  -e MYSQL_HOST=code_exec_mysql \
-  -e MYSQL_PORT=3306 \
-  -e REDIS_ADDR=code_exec_redis:6379 \
-  code-exec/go go run main.go
+cd backend
 
+# 安装依赖
+go mod tidy
 
-  docker run -d --name backend_server --network deploy_code_exec_net -p 8080:8080 -v "${PWD}/backend:/app" -w /app -v /var/run/docker.sock:/var/run/docker.sock -e MYSQL_HOST=code_exec_mysql -e MYSQL_PORT=3306 -e REDIS_ADDR=code_exec_redis:6379 code-exec/go go run main.go
+# 启动服务
+go run main.go
 ```
+*后端服务将监听 :8080*
 
-### 4. 启动前端服务
+### 5. 启动前端服务
 ```bash
 cd frontend
+
+# 安装依赖
 npm install
+
+# 启动开发服务器
 npm run dev
 ```
-
-### 5. 访问应用
-打开浏览器访问：**http://localhost:5173**
+*访问 **http://localhost:5173** 开始使用*
 
 ---
 
-## � 再次启动（日常使用）
+## 🔧 常见问题 (FAQ)
 
-镜像构建是**一次性**的，下次启动只需执行以下步骤：
-
-```bash
-# 1. 启动基础设施（如果已停止）
-cd deploy
-docker-compose up -d
-
-# 2. 启动后端服务（如果已停止）
-docker start backend_server
-
-# 3. 启动前端
-cd frontend
-npm run dev
+### Q: 程序里无法显示图片？(plt.show 报错)
+**A:** 由于沙箱运行在服务器端（无显示器），请勿使用 `plt.show()`。
+正确做法是保存为文件：
+```python
+import matplotlib.pyplot as plt
+# ... 画图代码 ...
+plt.savefig('output.png') # <--- 关键：保存为 output.png
 ```
+系统会自动检测到该文件并显示在您的终端里。
 
-> **提示**：如果 `backend_server` 容器不存在，需要重新运行第3步的 `docker run` 命令创建。
+### Q: 运行超时？
+**A:** 每个请求有默认的 **25秒** 超时限制。如果您的代码涉及大量计算或 `sleep`，可能会被强制终止。
 
 ---
 
-## �📁 项目结构
+## 📂 项目结构
+
 ```
-├── backend/          # Go 后端服务
-│   ├── config/       # 配置加载
-│   ├── internal/     # 核心业务逻辑
-│   │   ├── api/      # HTTP/WebSocket 接口
-│   │   ├── auth/     # JWT 认证
-│   │   ├── docker/   # Docker 沙箱执行
-│   │   ├── model/    # 数据模型
-│   │   └── queue/    # Redis 任务队列
-│   └── main.go       # 入口文件
+├── backend/          # Go 后端核心
+│   ├── config/       # 配置管理
+│   ├── internal/     
+│   │   ├── api/      # HTTP & WebSocket 接口
+│   │   ├── docker/   # Docker 沙箱池与执行逻辑
+│   │   ├── queue/    # Redis 任务队列消费者
+│   │   └── auth/     # 认证模块
+│   └── languages.yaml # 语言编译/运行配置
 ├── frontend/         # Vue 3 前端
-│   └── src/
-│       ├── components/  # 编辑器和终端组件
-│       └── App.vue      # 主应用
-└── deploy/           # 部署配置
-    ├── docker-compose.yml  # MySQL + Redis
-    └── images/             # 代码执行环境镜像
+│   ├── src/
+│   │   ├── components/  # 核心组件 (Terminal, CodeEditor)
+│   │   └── assets/      # 静态资源
+├── deploy/           # 部署与基础设施
+│   ├── images/       # 语言镜像 Dockerfile
+│   └── docker-compose.yml
+├── jmeter/           # JMeter 压力测试套件
 ```
 
 ---
+150: 
+151: ## 🌍 如何添加新语言 (How to Add a New Language)
+152: 
+153: 想要为平台添加一门新语言（例如 `Ruby`）？只需按照以下三步操作：
+154: 
+155: ### 第一步：创建 Docker 执行环境
+156: 
+157: 1. 在 `deploy/images` 下创建新目录，例如 `ruby`。
+158: 2. 在该目录中创建 `Dockerfile`，确保环境可以编译/运行该语言。
+159:    ```dockerfile
+160:    # deploy/images/ruby/Dockerfile
+161:    FROM ruby:3.2-alpine
+162:    WORKDIR /app
+163:    CMD ["sleep", "infinity"] # 必须添加：保持容器常驻运行，等待调度
+164:    ```
+165: 3. 构建并标记镜像：
+166:    ```bash
+167:    docker build -t code-exec/ruby deploy/images/ruby
+168:    ```
+169: 
+170: ### 第二步：配置后端
+171: 
+172: 1. 修改 `backend/languages.yaml`，注册语言信息和执行命令：
+173:    ```yaml
+174:    - id: ruby             # 唯一标识符
+175:      image: code-exec/ruby # 对应的Docker镜像名
+176:      filename: main.rb    # 用户代码保存的文件名
+177:      run_cmd: ["ruby", "main.rb"] # 运行命令
+178:    ```
+179: 2. (可选) 如果希望初始化数据库时自动添加：
+180:    修改 `backend/main.go` 中的 `seedLanguages` 函数，将新语言加入列表。
+181: 
+182: ### 第三步：配置前端
+183: 
+184: 1. **图标**: 将语言图标（如 `ruby.png`）放入 `frontend/src/assets/icons/`。
+185: 2. **选择器**: 修改 `frontend/src/components/LanguageSelector.vue`，在 `defaultLanguages` 数组中添加新项。
+186: 3. **编辑器支持**: 修改 `frontend/src/views/EditorView.vue`，在 `fileExtensions`, `mimeTypes`, `snippets` 等对象中添加对应配置。
+187: 4. **初始化数据**: 修改 `frontend/src/stores/editor.js`，添加默认的 Hello World 代码片段。
+188: 
+189: 完成后重启后端服务即可生效！
+190: 
+191: ---
 
-## � 更新后端代码
+## 📊 在线用户追踪机制
 
-后端代码通过 `-v $(pwd)/backend:/app` 挂载到容器中，修改代码后只需**重启容器**即可生效：
+### 当前实现（活跃用户计数）
 
-```bash
-# 重启后端容器（代码修改后）
-docker restart backend_server
-
-# 查看日志确认启动成功
-docker logs --tail 20 backend_server
-```
-
-> **注意**：由于使用 `go run main.go` 启动，重启时会重新编译代码，可能需要几秒钟。
-
----
-
-## �🔧 常见问题
-
-### 后端启动失败
-```bash
-# 检查日志
-docker logs backend_server
-
-# 重启服务
-docker restart backend_server
-```
-
-### 前端连接错误
-确保后端服务已启动并监听 8080 端口。
-
-### Docker 镜像构建慢
-Java 镜像构建较慢（需下载 OpenJDK），请耐心等待或先使用其他语言测试。
-
----
-
-## ➕ 添加新语言
-
-本项目支持通过配置扩展新语言，步骤如下：
-
-### 1. 构建 Docker 镜像
-在 `deploy/images` 下创建新语言的 Dockerfile（参考现有语言）：
-```dockerfile
-# deploy/images/yourlang/Dockerfile
-FROM your-base-image
-WORKDIR /app
-CMD ["sleep", "infinity"]
-```
-
-构建镜像：
-```bash
-docker build -t code-exec/yourlang deploy/images/yourlang
-```
-
-### 2. 配置后端 (languages.yaml)
-编辑 `backend/languages.yaml` 添加配置：
-
-```yaml
-- id: yourlang
-  image: code-exec/yourlang
-  filename: main.xxx
-  # 编译命令（可选）
-  compile_cmd: ["compile_command", "..."] 
-  # 运行命令
-  run_cmd: ["run_command", "..."]
-```
-
-修改配置后需重启后端服务：
-```bash
-docker restart backend_server
-```
-查看后端日志（docker logs -f backend_server）来验证效果。
-### 3. 配置前端展示
-在数据库中添加新语言记录（供前端展示）：
-对应的 Go 代码位于 `backend/main.go` 中的 `seedLanguages` 函数：
-```go
-// backend/main.go
-{Value: "yourlang", Label: "Language Name", Icon: "icon.png", DisplayOrder: 8, Enabled: true},
-```
-修改后重启后端会自动同步到数据库。
-
----
-
-### 4. 调整容器池大小
-
-默认容器池大小为每种语言 **3** 个。如需支持更高并发，可调整 `backend/internal/docker/pool.go`：
+**文件位置**: `backend/internal/api/middleware.go`
 
 ```go
-// backend/internal/docker/pool.go
-func NewPool(s *Sandbox) *Pool {
-    return &Pool{
-        // ...
-        maxPoolSize:   3, // <-- 修改此数值（例如 10）
+// 在线用户存储（内存Map）
+var onlineUsers = make(map[uint]bool)
+
+// 用户访问受保护API时标记上线
+func TrackUserOnline(userID uint) {
+    onlineUsers[userID] = true
+}
+
+// 获取在线人数
+func GetOnlineUserCount() int {
+    return len(onlineUsers)
+}
+```
+
+**触发时机**: 用户通过 JWT 认证访问任何受保护接口时自动标记。
+
+### 机制特点
+
+| 特性 | 说明 |
+|------|------|
+| **计数方式** | 唯一用户ID去重 |
+| **存储位置** | 内存（服务重启清零） |
+| **追踪范围** | 仅统计访问过API的用户 |
+
+### ⚠️ 当前局限
+
+1. **无超时机制**: 用户一旦上线，除非服务重启否则不会自动下线
+2. **无实时性**: 不是基于WebSocket的实时连接追踪
+3. **不持久化**: 服务重启后计数归零
+
+### 🔧 优化建议（可选实现）
+
+#### 方案一：心跳超时机制
+```go
+type OnlineUser struct {
+    LastActive time.Time
+}
+var onlineUsers = make(map[uint]OnlineUser)
+
+// 定时清理5分钟无活动的用户
+func cleanupInactiveUsers() {
+    for userID, user := range onlineUsers {
+        if time.Since(user.LastActive) > 5*time.Minute {
+            delete(onlineUsers, userID)
+        }
     }
 }
 ```
 
-修改后需重新编译并重启后端：
-```bash
-docker restart backend_server
+#### 方案二：WebSocket连接追踪
+在 `websocket.go` 中追踪连接：
+```go
+// 连接建立时
+connectedUsers[userID] = wsConn
+
+// 连接断开时
+delete(connectedUsers, userID)
+
+// 实时在线 = len(connectedUsers)
 ```
 
 ---
 
-## 📞 端口说明
-| 服务 | 端口 |
-|------|------|
-| 前端 | 5173 |
-| 后端 | 8080 |
-| MySQL | 13306 |
-| Redis | 16379 |
-今后避免此问题：
-如果再次遇到类似的 "undefined" 错误，但你确定代码是正确的，可以尝试：
+## 🧪 压力测试
 
-go clean -cache - 清理缓存
-go mod tidy - 整理依赖
-重启 IDE/编辑器的 Go 语言服务器
-现在你的项目应该可以正常编译和运行了！
+详见 `jmeter/README.md`，包含完整的JMeter测试计划和使用说明。

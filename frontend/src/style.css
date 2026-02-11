@@ -1,7 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  font-family: 'Outfit', system-ui, sans-serif;
+  /* 使用系统字体栈作为中文回退，避免加载大体积的 Noto Sans SC */
+  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
   line-height: 1.5;
   font-weight: 400;
   color-scheme: dark;
@@ -19,7 +20,7 @@ body {
   background-color: #f8fafc;
   /* 浅灰色背景 */
   min-height: 100vh;
-  font-family: 'Outfit', sans-serif;
+  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
 }
 
 #app {

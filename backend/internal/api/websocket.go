@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"sync"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -13,8 +14,33 @@ import (
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
-		return true // 开发环境允许所有跨域
+		origin := r.Header.Get("Origin")
+		// 使用与 CORS 中间件相同的来源检查逻辑
+		return IsOriginAllowed(origin)
 	},
+}
+
+// redisAddr WebSocket 使用的 Redis 地址（由 RegisterRoutes 设置）
+var wsRedisAddr string
+
+// wsRedisClient WebSocket 使用的 Redis 客户端单例
+var wsRedisClient *redis.Client
+var wsRedisOnce sync.Once
+
+// SetWSRedisAddr 设置 WebSocket 使用的 Redis 地址
+func SetWSRedisAddr(addr string) {
+	wsRedisAddr = addr
+}
+
+// getWSRedisClient 获取 WebSocket 使用的 Redis 客户端（单例）
+func getWSRedisClient() *redis.Client {
+	wsRedisOnce.Do(func() {
+		wsRedisClient = redis.NewClient(&redis.Options{
+			Addr:     wsRedisAddr,
+			PoolSize: 50, // 连接池大小
+		})
+	})
+	return wsRedisClient
 }
 
 // WebSocket 消息结构
@@ -37,11 +63,8 @@ func HandleWebSocket(c *gin.Context) {
 	}
 	defer conn.Close()
 
-	// 创建 Redis 客户端
-	rdb := redis.NewClient(&redis.Options{
-		Addr: "code_exec_redis:6379",
-	})
-	defer rdb.Close()
+	// 使用 Redis 客户端单例（不再每次连接都创建）
+	rdb := getWSRedisClient()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

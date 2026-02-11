@@ -1,6 +1,7 @@
 package api
 
 import (
+	"code-exec/internal/docker"
 	"code-exec/internal/model"
 	"code-exec/internal/queue"
 	"fmt"
@@ -11,10 +12,20 @@ import (
 	"gorm.io/gorm"
 )
 
-func RegisterRoutes(rg *gin.RouterGroup, db *gorm.DB) {
+// redisProducer 全局生产者实例（单例模式）
+var redisProducer *queue.Producer
+
+// RegisterRoutes 注册所有API路由
+// redisAddr: Redis服务器地址，例如 "127.0.0.1:6379"
+func RegisterRoutes(rg *gin.RouterGroup, db *gorm.DB, pool *docker.Pool, redisAddr string) {
+	// 设置数据库实例供中间件使用
+	SetDB(db)
+	// 设置 WebSocket 使用的 Redis 地址
+	SetWSRedisAddr(redisAddr)
+
 	authHandler := NewAuthHandler(db)
 
-	// 健康检查
+	// 健康检查接口
 	rg.GET("/ping", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "pong"})
 	})
@@ -27,19 +38,21 @@ func RegisterRoutes(rg *gin.RouterGroup, db *gorm.DB) {
 	// WebSocket（目前公开，可以加保护）
 	rg.GET("/ws", HandleWebSocket)
 
-	// 语言相关路由（公开） - 获取支持的编程语言列表
+	// 语言相关路由（公开）- 获取支持的编程语言列表
 	rg.GET("/languages", func(c *gin.Context) {
 		var languages []model.Language
 		if err := db.Where("enabled = ?", true).Order("display_order ASC").Find(&languages).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch languages"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "获取语言列表失败"})
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"languages": languages})
 	})
 
 	// 代码执行路由（受保护）
-	// 初始化生产者（理想情况下应当是单例，但为了简单起见在此处初始化）
-	producer := queue.NewProducer("code_exec_redis:6379") // 使用 Docker 网络地址
+	// 初始化生产者（单例模式，避免重复创建连接）
+	if redisProducer == nil {
+		redisProducer = queue.NewProducer(redisAddr)
+	}
 
 	// 受保护的路由组
 	protected := rg.Group("/")
@@ -76,7 +89,7 @@ func RegisterRoutes(rg *gin.RouterGroup, db *gorm.DB) {
 			}
 
 			// 推送到队列
-			err := producer.AddTask(queue.Task{
+			err := redisProducer.AddTask(queue.Task{
 				ID:           taskID,
 				Language:     input.Language,
 				Code:         input.Code,
@@ -128,4 +141,7 @@ func RegisterRoutes(rg *gin.RouterGroup, db *gorm.DB) {
 			c.JSON(http.StatusOK, gin.H{"submissions": response})
 		})
 	}
+
+	// 注册管理员路由
+	RegisterAdminRoutes(rg, db, pool)
 }

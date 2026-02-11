@@ -17,7 +17,7 @@
       <!-- Logo 区域 -->
       <div class="flex flex-col items-center justify-center mb-8 gap-4 group">
         <div class="w-20 h-20 bg-gradient-to-br from-cyan-400 to-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-cyan-500/30 group-hover:scale-105 transition-transform duration-500 ring-1 ring-white/20 overflow-hidden">
-          <img src="../assets/Dog.png" alt="Logo" class="w-full h-full object-cover">
+          <img src="../assets/Dog.webp" alt="Logo" class="w-full h-full object-cover">
         </div>
         <!-- <h1 class="text-6xl text-white drop-shadow-lg mt-2 font-normal" style="font-family: 'Zhi Mang Xing', cursive;"> -->
           <h1 class="text-6xl text-white drop-shadow-lg mt-2 font-bold" style="font-family: 'Ma Shan Zheng', cursive;">

@@ -12,6 +12,8 @@ When reviewing code, follow these steps:
 2. **Edge cases**: Are error conditions handled?
 3. **Style**: Does it follow project conventions?
 4. **Performance**: Are there obvious inefficiencies?
+5. **Architecture & Structure ** ：Is the code organized in a scalable and maintainable way?Separation of Concerns: Does the code follow the project's architectural pattern (e.g., MVC, Clean Architecture)? Is logic placed in the correctlayer(Controller vs Service vs Repository)?Modularity: Are components cohesive? Is there unnecessary coupling between modules?
+Dependency Management: Are dependencies clearly defined? Is there any circular dependency introduced?
 
 ## How to provide feedback
 

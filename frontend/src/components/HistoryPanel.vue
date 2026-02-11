@@ -125,9 +125,7 @@
 
 <script setup>
 import { ref, watch, onMounted } from 'vue'
-import axios from 'axios'
-import { useAuth } from '../stores/auth'
-import { fetchLanguages } from '../api'
+import { fetchLanguages, fetchSubmissions } from '../api'
 
 const props = defineProps({
   show: {
@@ -138,18 +136,16 @@ const props = defineProps({
 
 const emit = defineEmits(['update:show', 'load-code'])
 
-const { getToken } = useAuth()
-
 const loading = ref(false)
 const records = ref([])
 const languagesData = ref([])
 
 // 图标映射 - 用于加载本地图标
-const iconModules = import.meta.glob('../assets/icons/*.png', { eager: true })
+const iconModules = import.meta.glob('../assets/icons/*.webp', { eager: true })
 
 // 根据图标文件名获取图标路径
 const getIconUrl = (iconName) => {
-  const path = `../assets/icons/${iconName}`
+  const path = `../assets/icons/${iconName.replace('.png', '.webp')}`
   return iconModules[path]?.default || ''
 }
 
@@ -180,8 +176,11 @@ const languageColors = {
   cpp: 'bg-blue-500/20',
   c: 'bg-indigo-500/20',
   go: 'bg-cyan-500/20',
-  pypy: 'bg-green-500/20',
-  javascript: 'bg-yellow-400/20'
+
+  javascript: 'bg-yellow-400/20',
+  rust: 'bg-orange-600/20',
+  csharp: 'bg-indigo-600/20',
+  typescript: 'bg-blue-600/20'
 }
 
 const getLanguageColor = (value) => {
@@ -236,12 +235,7 @@ const formatTime = (dateStr) => {
 const fetchHistory = async () => {
   loading.value = true
   try {
-    const response = await axios.get('http://localhost:8080/api/submissions', {
-      headers: {
-        'Authorization': `Bearer ${getToken()}`
-      }
-    })
-    records.value = response.data.submissions || []
+    records.value = await fetchSubmissions()
   } catch (error) {
     console.error('Failed to fetch history:', error)
     records.value = []

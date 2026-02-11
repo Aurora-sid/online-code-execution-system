@@ -1,0 +1,7 @@
+language,code
+python,print('Hello World')\nfor i in range(5):\n    print(i)
+python,import math\nprint(math.pi)\nprint(math.e)
+javascript,console.log('Hello JavaScript');\nfor (let i = 0; i < 5; i++) console.log(i);
+javascript,const sum = (a, b) => a + b;\nconsole.log(sum(10, 20));
+c,#include <stdio.h>\nint main() { printf(\"Hello C\"); return 0; }
+cpp,#include <iostream>\nint main() { std::cout << \"Hello C++\"; return 0; }

@@ -51,7 +51,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import axios from 'axios'
+import { fetchLanguages as apiFetchLanguages } from '../api'
 
 const props = defineProps({
   modelValue: {
@@ -85,6 +85,9 @@ const defaultLanguages = [
   { value: "java", label: "Java", icon: "ph ph-file-code text-orange-500" },
   { value: "cpp", label: "C++", icon: "ph ph-file-cpp text-purple-500" },
   { value: "c", label: "C", icon: "ph ph-file-c text-blue-600" },
+  { value: "rust", label: "Rust", icon: "ph ph-gear text-orange-600" },
+  { value: "csharp", label: "C#", icon: "csharp.webp" }, // Custom icon from local assets
+  { value: "typescript", label: "TypeScript", icon: "ph ph-file-ts text-blue-500" },
 ]
 
 const currentLang = computed(() => {
@@ -107,7 +110,7 @@ const selectLanguage = (value) => {
 const getIconUrl = (iconName) => {
   if (!iconName) return ''
   try {
-    return new URL(`../assets/icons/${iconName}`, import.meta.url).href
+    return new URL(`../assets/icons/${iconName.replace('.png', '.webp')}`, import.meta.url).href
   } catch (e) {
     return ''
   }
@@ -115,9 +118,7 @@ const getIconUrl = (iconName) => {
 
 const fetchLanguages = async () => {
   try {
-    const response = await axios.get('/api/languages')
-    // API returns { languages: [...] }
-    const langs = response.data?.languages || response.data
+    const langs = await apiFetchLanguages()
     
     if (langs && Array.isArray(langs) && langs.length > 0) {
       languages.value = langs.map(lang => ({

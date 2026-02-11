@@ -3,7 +3,7 @@
     <!-- 左侧：Logo -->
     <div class="flex items-center gap-2 md:gap-3 flex-shrink-0">
       <div class="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-glow-primary flex-shrink-0">
-        <img src="../assets/TX.jpg" class="w-full h-full object-contain">
+        <img src="../assets/TX.webp" class="w-full h-full object-contain">
       </div>
       <div class="hidden sm:block">
         <h1 class="font-bold text-sm md:text-lg tracking-tight">
@@ -50,13 +50,23 @@
           <span class="hidden lg:inline">保存至本地</span>
         </button>
 
+        <!-- AI 分析按钮 -->
+        <button 
+          @click="$emit('toggle-analysis')"
+          class="flex items-center justify-center gap-2 p-2 md:px-4 md:py-1.5 rounded-lg bg-gradient-to-r from-purple-500 to-indigo-600 text-white font-medium text-sm transition-all active:scale-95 hover:scale-105 shadow-md hover:shadow-lg hover:brightness-110 border-none"
+          title="智能分析"
+        >
+          <i class="ph ph-sparkle text-sm"></i>
+          <span class="hidden lg:inline">智能分析</span>
+        </button>
+
         <!-- 运行按钮 -->
         <button 
           @click="$emit('run')"
           :disabled="loading"
           class="flex items-center justify-center gap-2 p-2 md:px-5 md:py-1.5 rounded-lg bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] text-white font-semibold text-sm shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50 hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
         >
-          <img v-if="!loading" src="../assets/Vue-icons/run.png" alt="运行" class="w-5 h-5 md:w-6 md:h-6">
+          <img v-if="!loading" src="../assets/Vue-icons/run.webp" alt="运行" class="w-5 h-5 md:w-6 md:h-6">
           <i v-else class="ph ph-spinner animate-spin text-lg"></i>
           <span class="hidden md:inline tracking-[0.3em]">{{ loading ? '运行中...' : '运行代码' }}</span>
         </button>
@@ -68,7 +78,7 @@
           @click="showUserMenu = !showUserMenu"
           class="h-8 md:h-10 px-2 md:px-3 rounded-xl bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 hover:from-indigo-100 hover:via-purple-100 hover:to-pink-100 text-gray-700 text-sm font-bold flex items-center gap-1 md:gap-2 shadow-sm hover:shadow-md transition-all active:scale-95 hover:scale-105 border border-indigo-100/50"
         >
-          <img src="../assets/Vue-icons/user.png" alt="用户头像" class="w-5 h-5 md:w-6 md:h-6 rounded-full">
+          <img src="../assets/Vue-icons/user.webp" alt="用户头像" class="w-5 h-5 md:w-6 md:h-6 rounded-full">
           <span class="w-2 h-2 rounded-full bg-emerald-400 hidden md:block"></span>
           <span class="hidden sm:inline">{{ user?.username || 'Guest' }}</span>
         </button>
@@ -83,9 +93,18 @@
               <p class="text-sm font-semibold text-gray-900">{{ user?.username }}</p>
               <p class="text-xs text-gray-500 mt-0.5 flex items-center gap-1.5">
                 <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Online
+                <span v-if="user?.role === 'admin'" class="ml-2 px-1.5 py-0.5 bg-purple-100 text-purple-600 rounded text-[10px] font-medium">管理员</span>
               </p>
             </div>
             <div class="p-1">
+              <button 
+                v-if="user?.role === 'admin'"
+                @click="goToAdmin"
+                class="w-full px-3 py-2 text-left text-sm text-purple-600 hover:bg-purple-50 rounded-lg flex items-center gap-2.5 transition-colors"
+              >
+                <i class="ph ph-gauge text-lg"></i>
+                管理后台
+              </button>
               <button 
                 @click="handleLogout"
                 class="w-full px-3 py-2 text-left text-sm text-red-500 hover:bg-red-50 hover:text-red-600 rounded-lg flex items-center gap-2.5 transition-colors"
@@ -122,7 +141,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['update:currentLanguage', 'run', 'save', 'toggle-history', 'toggle-sidebar'])
+const emit = defineEmits(['update:currentLanguage', 'run', 'save', 'toggle-history', 'toggle-sidebar', 'toggle-analysis'])
 
 const router = useRouter()
 const { user, logout } = useAuth()
@@ -136,14 +155,15 @@ const internalLanguage = computed({
   set: (value) => emit('update:currentLanguage', value)
 })
 
-const userInitial = computed(() => {
-  return user.value?.username?.charAt(0).toUpperCase() || 'U'
-})
-
 const handleLogout = () => {
   const lastUser = user.value?.username
   logout()
   router.push({ path: '/login', query: { lastUser } })
+}
+
+const goToAdmin = () => {
+  showUserMenu.value = false
+  router.push('/admin')
 }
 
 // 点击外部关闭用户菜单

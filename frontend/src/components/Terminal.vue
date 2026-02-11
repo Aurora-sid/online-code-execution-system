@@ -8,14 +8,8 @@
             <polyline points="4 17 10 11 4 5"></polyline>
             <line x1="12" y1="19" x2="20" y2="19"></line>
           </svg>
-          <!-- alt 是 <img> 标签的一个重要属性，它是 "alternative text"（替代文本） 的缩写。简单来说，它的主要作用是：当图片因为各种原因无法显示时，用来代替图片显示的文本内容 -->
           终端
         </div>
-        <!-- <button 
-          class="px-2.5 py-1 text-xs font-medium rounded text-gray-400 hover:text-gray-200 hover:bg-gray-700 transition-colors"
-        >
-          问题【Problems】
-        </button> -->
       </div>
       <div class="flex items-center gap-2">
         <!-- 输入按钮 -->
@@ -29,6 +23,21 @@
         >
           <i class="ph ph-keyboard"></i>
           <span>输入</span>
+        </button>
+        <!-- 分析报错按钮 -->
+        <button 
+          @click="analyzeTerminalError"
+          :disabled="analyzing || !hasContent"
+          class="px-2 py-1 text-xs font-medium rounded transition-colors flex items-center gap-1"
+          :class="analyzing 
+            ? 'text-purple-400 bg-purple-500/20 cursor-wait' 
+            : hasContent 
+              ? 'text-orange-400 hover:text-orange-300 hover:bg-orange-500/20' 
+              : 'text-gray-600 cursor-not-allowed'"
+          :title="hasContent ? '使用 AI 分析终端报错' : '终端无内容可分析'"
+        >
+          <i :class="analyzing ? 'ph ph-spinner animate-spin' : 'ph ph-bug'"></i>
+          <span>{{ analyzing ? '分析中...' : '分析报错' }}</span>
         </button>
         <button 
           @click="clear"
@@ -51,28 +60,20 @@
     <div class="relative flex-1 overflow-hidden">
       <div v-show="!collapsed" ref="terminalRef" class="h-full w-full"></div>
       
-      <!-- 图片预览区域 -->
-      <div v-if="images.length" class="absolute bottom-4 right-4 flex flex-col gap-2 max-h-[60%] overflow-y-auto p-2 bg-gray-900/80 backdrop-blur rounded border border-gray-700">
-        <div class="text-xs text-gray-400 font-bold px-1">生成结果:</div>
-        <div v-for="(img, idx) in images" :key="idx" class="relative group">
-          <img 
-            :src="img" 
-            class="w-40 h-auto object-contain border border-gray-600 rounded bg-white cursor-zoom-in hover:border-cyan-500 transition-colors"
-            @click="previewImage(img)"
-            title="点击放大"
-          />
-          <button @click.stop="images.splice(idx, 1)" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-            <i class="ph ph-x text-xs"></i>
-          </button>
-        </div>
-      </div>
+      <!-- 图片预览子组件 -->
+      <TerminalImagePreview 
+        :images="images" 
+        @remove-image="images.splice($event, 1)" 
+      />
     </div>
 
-    <!-- 全屏图片预览模态框 -->
-    <div v-if="previewUrl" class="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-10" @click="previewUrl = null">
-      <img :src="previewUrl" class="max-w-full max-h-full object-contain rounded shadow-2xl" />
-      <button class="absolute top-5 right-5 text-white/50 hover:text-white text-4xl">&times;</button>
-    </div>
+    <!-- AI 分析弹窗子组件 -->
+    <TerminalAnalysis 
+      :visible="showAnalysisModal"
+      :result="analysisResult"
+      :error="analysisError"
+      @close="showAnalysisModal = false"
+    />
 
     <!-- 输入区域 -->
     <div v-show="!collapsed && inputEnabled" class="flex-shrink-0 border-t border-gray-700 bg-gray-800/80 p-2">
@@ -105,34 +106,38 @@
 </template>
 
 <script setup>
-import { ref, shallowRef, onMounted, onUnmounted, watch } from 'vue';
+import { ref, shallowRef, computed, onMounted, onUnmounted, watch } from 'vue';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
+import { analyzeError } from '../api';
+import TerminalImagePreview from './TerminalImagePreview.vue';
+import TerminalAnalysis from './TerminalAnalysis.vue';
 import 'xterm/css/xterm.css';
 
 const props = defineProps({
-  height: {
-    type: String,
-    default: '200px'
-  },
-  fontSize: {
-    type: Number,
-    default: 13
-  },
-  collapsed: {
-    type: Boolean,
-    default: false
-  }
-})
+  height: { type: String, default: '200px' },
+  fontSize: { type: Number, default: 13 },
+  collapsed: { type: Boolean, default: false },
+  code: { type: String, default: '' },
+  language: { type: String, default: 'python' }
+});
 
-const emit = defineEmits(['send-input', 'toggle-collapse'])
+const emit = defineEmits(['send-input', 'toggle-collapse']);
 
 const terminalRef = shallowRef(null);
 const inputRef = shallowRef(null);
 const inputValue = ref('');
 const inputEnabled = ref(false);
 const images = ref([]);
-const previewUrl = ref(null);
+
+// 报错分析状态
+const analyzing = ref(false);
+const analysisResult = ref('');
+const analysisError = ref('');
+const showAnalysisModal = ref(false);
+const terminalContent = ref('');
+
+const hasContent = computed(() => terminalContent.value.trim().length > 0);
 
 let term = null;
 let fitAddon = null;
@@ -173,14 +178,11 @@ onMounted(() => {
     
     resizeObserver = new ResizeObserver(() => {
       if (fitAddon && !props.collapsed) {
-        requestAnimationFrame(() => {
-          fitAddon.fit();
-        });
+        requestAnimationFrame(() => fitAddon.fit());
       }
     });
     
     resizeObserver.observe(terminalRef.value);
-    
     setTimeout(() => fitAddon.fit(), 100);
     setTimeout(() => fitAddon.fit(), 300);
   }
@@ -193,12 +195,9 @@ onMounted(() => {
       const currentSize = term.options.fontSize;
       const newSize = Math.max(8, Math.min(24, currentSize + delta));
       term.options.fontSize = newSize;
-      setTimeout(() => {
-        if (fitAddon) fitAddon.fit();
-      }, 50);
+      setTimeout(() => fitAddon?.fit(), 50);
     }
   };
-  
   terminalRef.value.addEventListener('wheel', wheelHandler, { passive: false });
 
   // 快捷键缩放
@@ -223,30 +222,23 @@ onMounted(() => {
         e.preventDefault();
         if (newSize !== null) {
           term.options.fontSize = newSize;
-          setTimeout(() => {
-            if (fitAddon) fitAddon.fit();
-          }, 50);
+          setTimeout(() => fitAddon?.fit(), 50);
         }
       }
     }
   };
-  
   terminalRef.value.addEventListener('keydown', keyHandler);
 });
 
 watch(() => props.fontSize, (newSize) => {
   if (term) {
     term.options.fontSize = newSize;
-    setTimeout(() => {
-      if (fitAddon) fitAddon.fit();
-    }, 50);
+    setTimeout(() => fitAddon?.fit(), 50);
   }
 });
 
 onUnmounted(() => {
-  if (resizeObserver) {
-    resizeObserver.disconnect();
-  }
+  resizeObserver?.disconnect();
   if (wheelHandler && terminalRef.value) {
     terminalRef.value.removeEventListener('wheel', wheelHandler);
   }
@@ -258,74 +250,80 @@ onUnmounted(() => {
 
 // 写入终端
 const write = (text) => {
-  // 检查是否包含图片 Base64
-  // 格式: <<<<IMAGE_START>>>>base64string<<<<IMAGE_END>>>>
-  // 使用非贪婪匹配
-  const imgRegex = /<<<<IMAGE_START>>>>(.*?)<<<<IMAGE_END>>>>/s;
+  const imgRegex = /<<<IMAGE_START>>>>(.*?)<<<<IMAGE_END>>>>/s;
   const match = text.match(imgRegex);
 
   if (match) {
     const base64Str = match[1];
     const imgSrc = `data:image/png;base64,${base64Str}`;
     images.value.push(imgSrc);
-    // 替换掉图片标记，避免在终端显示乱码
     text = text.replace(match[0], '\n\x1b[36m✨ [System] 成功捕获图片文件: /app/output.png\n   已将其渲染至右下角"生成结果"区域，点击可查看大图。\x1b[0m\n');
   }
 
+  terminalContent.value += text + '\n';
   term?.writeln(text);
   term?.scrollToBottom();
 };
 
-const previewImage = (url) => {
-  previewUrl.value = url;
-};
-
-// 清空终端
 const clear = () => {
   term?.clear();
+  terminalContent.value = '';
 };
 
-// 启用输入
 const enableInput = () => {
   inputEnabled.value = true;
-  // 聚焦到输入框
-  setTimeout(() => {
-    inputRef.value?.focus();
-  }, 100);
+  setTimeout(() => inputRef.value?.focus(), 100);
 };
 
-// 禁用输入
 const disableInput = () => {
   inputEnabled.value = false;
   inputValue.value = '';
 };
 
-// 提交输入
 const submitInput = () => {
   if (!inputValue.value.trim()) return;
-  
   const value = inputValue.value;
-  // 在终端显示用户输入
   term?.writeln(`\x1b[33m> ${value}\x1b[0m`);
-  // 发送到父组件
   emit('send-input', value + '\n');
-  // 清空输入
   inputValue.value = '';
 };
 
-// 切换输入框显示状态
 const toggleInput = () => {
   inputEnabled.value = !inputEnabled.value;
   if (inputEnabled.value) {
-    setTimeout(() => {
-      inputRef.value?.focus();
-    }, 100);
+    setTimeout(() => inputRef.value?.focus(), 100);
+  }
+};
+
+const analyzeTerminalError = async () => {
+  if (analyzing.value || !terminalContent.value.trim()) return;
+  
+  analyzing.value = true;
+  analysisResult.value = '';
+  analysisError.value = '';
+  showAnalysisModal.value = true;
+  
+  try {
+    const code = props.code || '';
+    const language = props.language || 'unknown';
+    const errorOutput = terminalContent.value;
+    
+    const response = await analyzeError(code, language, errorOutput);
+    
+    if (response.status === 'success') {
+      analysisResult.value = response.result;
+    } else {
+      analysisError.value = response.error || '分析失败';
+    }
+  } catch (err) {
+    analysisError.value = err.response?.data?.error || err.message || '请求失败，请检查网络连接';
+  } finally {
+    analyzing.value = false;
   }
 };
 
 defineExpose({ write, clear, enableInput, disableInput, toggleInput });
 </script>
-
 
 <style scoped>
 :deep(.xterm) {

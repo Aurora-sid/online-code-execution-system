@@ -19,11 +19,22 @@ languages:
     image: code-exec/go
     filename: main.go
     run_cmd: ["go", "run", "main.go"]
-  - id: pypy
-    image: code-exec/pypy
-    filename: main.py
-    run_cmd: ["pypy3", "-u", "main.py"]
+  - id: rust
+    image: code-exec/rust
+    filename: main.rs
+    compile_cmd: ["sh", "-c", "rustc main.rs -o main && ./main"]
+  - id: csharp
+    image: code-exec/csharp
+    filename: Program.cs
+    run_cmd: ["sh", "-c", "if [ ! -f *.csproj ]; then dotnet new console --force > /dev/null 2>&1; fi; dotnet run"]
+
   - id: javascript
     image: code-exec/js
     filename: main.js
     run_cmd: ["node", "main.js"]
+  
+  - id: typescript
+    image: code-exec/typescript
+    filename: main.ts
+    run_cmd: ["tsx", "main.ts"]
+  

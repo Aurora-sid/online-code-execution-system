@@ -10,7 +10,14 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
 )
+
+// PoolLabelKey 是用于标识容器池容器的标签键
+const PoolLabelKey = "com.docker.compose.project"
+
+// PoolLabelValue 是容器池容器的标签值
+const PoolLabelValue = "container-pool"
 
 type Pool struct {
 	Sandbox *Sandbox
@@ -19,15 +26,32 @@ type Pool struct {
 	// 容器ID -> 语言 的映射（用于追踪）
 	containerLang map[string]string
 	mu            sync.Mutex
-	maxPoolSize   int // 每种语言最大缓存容器数
+	maxPoolSize   int   // 每种语言最大缓存容器数
+	memoryBytes   int64 // 容器内存限制 (bytes)
+	nanoCPUs      int64 // 容器 CPU 限制 (纳秒)
 }
 
-func NewPool(s *Sandbox) *Pool {
+// NewPool 创建一个新的容器池，使用配置中的资源限制
+func NewPool(s *Sandbox, cfg *config.Config) *Pool {
+	maxPoolSize := cfg.ContainerPoolSize
+	if maxPoolSize <= 0 {
+		maxPoolSize = 3 // 默认值
+	}
+
+	// 转换配置值
+	memoryBytes := int64(cfg.ContainerMemoryMB) * 1024 * 1024
+	nanoCPUs := int64(cfg.ContainerCPUCores * 1e9)
+
+	log.Printf("[Pool] 初始化容器池: 池大小=%d, 内存=%dMB, CPU=%.1f核\n",
+		maxPoolSize, cfg.ContainerMemoryMB, cfg.ContainerCPUCores)
+
 	return &Pool{
 		Sandbox:       s,
 		Available:     make(map[string][]string),
 		containerLang: make(map[string]string),
-		maxPoolSize:   3, // 每种语言最多保留3个空闲容器
+		maxPoolSize:   maxPoolSize,
+		memoryBytes:   memoryBytes,
+		nanoCPUs:      nanoCPUs,
 	}
 }
 
@@ -72,7 +96,7 @@ func (p *Pool) createContainer(ctx context.Context, language string) (string, er
 			Cmd:   []string{"sleep", "infinity"},
 			Tty:   false,
 			Labels: map[string]string{
-				"com.docker.compose.project": "container-pool", // 让容器在 Docker Desktop 中归入 "container-pool" 项目组
+				PoolLabelKey: PoolLabelValue, // 自定义标签，避免被 Docker Desktop 误识别为 Compose 项目
 			},
 			Env: func() []string {
 				if language == "go" {
@@ -81,12 +105,12 @@ func (p *Pool) createContainer(ctx context.Context, language string) (string, er
 				return nil
 			}(),
 		},
-		// 限制容器资源
+		// 限制容器资源（使用配置值）
 		&container.HostConfig{
 			Resources: container.Resources{
-				Memory:    2 * 1024 * 1024 * 1024,                         // 2GB（为 Go 编译器增加）
-				NanoCPUs:  2000000000,                                     // 2.0 CPU
-				PidsLimit: func() *int64 { v := int64(100); return &v }(), // 增加进程数限制
+				Memory:    p.memoryBytes,
+				NanoCPUs:  p.nanoCPUs,
+				PidsLimit: func() *int64 { v := int64(100); return &v }(), // 进程数限制
 			},
 			NetworkMode: "none", // 安全：无网络
 		},
@@ -153,10 +177,14 @@ func (p *Pool) ReturnContainer(ctx context.Context, containerID string) {
 		p.Available[lang] = append(p.Available[lang], containerID)
 		log.Printf("[Pool] 容器 %s 已归还到池中 (语言: %s, 池大小: %d/%d)\n", containerID[:12], lang, len(p.Available[lang]), p.maxPoolSize)
 	} else {
-		// 池已满，销毁容器
+		// 池已满，销毁容器（异步执行但记录日志追踪错误）
 		log.Printf("[Pool] 池已满，销毁容器 %s (语言: %s)\n", containerID[:12], lang)
-		go p.Sandbox.cli.ContainerRemove(context.Background(), containerID, types.ContainerRemoveOptions{Force: true})
 		delete(p.containerLang, containerID)
+		go func(id string) {
+			if err := p.Sandbox.cli.ContainerRemove(context.Background(), id, types.ContainerRemoveOptions{Force: true}); err != nil {
+				log.Printf("[Pool] 异步删除容器 %s 失败: %v\n", id[:12], err)
+			}
+		}(containerID)
 	}
 }
 
@@ -215,4 +243,129 @@ func (p *Pool) warmupGoContainer(ctx context.Context, containerID string) error 
 func main() {}`
 	_, _, err := p.Sandbox.Execute(ctx, containerID, "go", warmupCode, "")
 	return err
+}
+
+// CleanupStaleContainers 清理所有带有容器池标签的残留容器
+// 应在程序启动时调用，以清除上次运行遗留的容器
+func (p *Pool) CleanupStaleContainers(ctx context.Context) (int, error) {
+	// 使用标签过滤器查找所有容器池容器
+	filterArgs := filters.NewArgs()
+	filterArgs.Add("label", PoolLabelKey+"="+PoolLabelValue)
+
+	containers, err := p.Sandbox.cli.ContainerList(ctx, types.ContainerListOptions{
+		All:     true, // 包括已停止的容器
+		Filters: filterArgs,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("列出容器失败: %w", err)
+	}
+
+	removedCount := 0
+	for _, c := range containers {
+		log.Printf("[Pool] 清理残留容器: %s (状态: %s)\n", c.ID[:12], c.State)
+		if err := p.Sandbox.cli.ContainerRemove(ctx, c.ID, types.ContainerRemoveOptions{Force: true}); err != nil {
+			log.Printf("[Pool] 删除容器 %s 失败: %v\n", c.ID[:12], err)
+		} else {
+			removedCount++
+		}
+	}
+
+	if removedCount > 0 {
+		log.Printf("[Pool] 已清理 %d 个残留容器\n", removedCount)
+	}
+	return removedCount, nil
+}
+
+// ResetPool 重置容器池：清空所有缓存的容器
+func (p *Pool) ResetPool(ctx context.Context) (int, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	removedCount := 0
+
+	// 清理所有已缓存的容器
+	for lang, ids := range p.Available {
+		for _, id := range ids {
+			log.Printf("[Pool] 重置: 销毁容器 %s (语言: %s)\n", id[:12], lang)
+			if err := p.Sandbox.cli.ContainerRemove(ctx, id, types.ContainerRemoveOptions{Force: true}); err != nil {
+				log.Printf("[Pool] 删除容器 %s 失败: %v\n", id[:12], err)
+			} else {
+				removedCount++
+			}
+		}
+	}
+
+	// 清空池状态
+	p.Available = make(map[string][]string)
+	p.containerLang = make(map[string]string)
+
+	log.Printf("[Pool] 容器池已重置，共销毁 %d 个容器\n", removedCount)
+	return removedCount, nil
+}
+
+// PoolStats 容器池统计信息
+type PoolStats struct {
+	TotalContainers int                      `json:"total"`
+	MaxPerLang      int                      `json:"maxPerLang"`
+	MemoryMB        int                      `json:"memoryMB"`
+	CPUCores        float64                  `json:"cpuCores"`
+	LangDetails     map[string]LangPoolStats `json:"details"`
+}
+
+// LangPoolStats 每种语言的容器池统计
+type LangPoolStats struct {
+	Idle   int `json:"idle"`
+	Active int `json:"active"`
+}
+
+// GetStats 获取容器池实时统计信息
+func (p *Pool) GetStats() *PoolStats {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	stats := &PoolStats{
+		MaxPerLang:      p.maxPoolSize,
+		MemoryMB:        int(p.memoryBytes / 1024 / 1024),
+		CPUCores:        float64(p.nanoCPUs) / 1e9,
+		LangDetails:     make(map[string]LangPoolStats),
+		TotalContainers: len(p.containerLang),
+	}
+
+	// 统计各语言的闲置容器数
+	idleCounts := make(map[string]int)
+	for lang, ids := range p.Available {
+		idleCounts[lang] = len(ids)
+	}
+
+	// 统计各语言的总容器数
+	totalCounts := make(map[string]int)
+	for _, lang := range p.containerLang {
+		totalCounts[lang]++
+	}
+
+	// 组装详情
+	// 遍历所有已知语言（包括有活跃容器但没有闲置容器的）
+	allLangs := make(map[string]bool)
+	for lang := range idleCounts {
+		allLangs[lang] = true
+	}
+	for lang := range totalCounts {
+		allLangs[lang] = true
+	}
+
+	for lang := range allLangs {
+		total := totalCounts[lang]
+		idle := idleCounts[lang]
+		active := total - idle
+		if active < 0 {
+			active = 0 // 理论上不应发生
+		}
+
+		stats.LangDetails[lang] = LangPoolStats{
+			Idle:   idle,
+			Active: active,
+		}
+	}
+
+	return stats
 }

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"code-exec/config"
 	"encoding/base64"
@@ -130,8 +131,7 @@ func (s *Sandbox) ExecuteInteractive(ctx context.Context, containerID string, la
 	go func() {
 		defer close(done)
 		buf := make([]byte, 4096)
-		// lastOutputTime := time.Now()
-		// waitingInputSent := false
+		var pendingBytes []byte // UTF-8 不完整字节缓冲
 
 		for {
 			// 设置读取超时
@@ -139,25 +139,40 @@ func (s *Sandbox) ExecuteInteractive(ctx context.Context, containerID string, la
 
 			n, err := attachResp.Reader.Read(buf)
 			if n > 0 {
-				// lastOutputTime = time.Now()
-				// waitingInputSent = false // 有新输出，重置标记
-
 				// 跳过 Docker 多路复用头部 (8 bytes)
 				data := buf[:n]
 				if len(data) > 8 && (data[0] == 1 || data[0] == 2) {
 					data = data[8:]
 				}
-				output := sanitizeOutput(string(data))
-				// 扫描 GUI 错误提示
-				if guiTip := scanForGuiErrors(output); guiTip != "" {
-					output += guiTip
+
+				// 将待处理字节与新数据合并
+				if len(pendingBytes) > 0 {
+					data = append(pendingBytes, data...)
+					pendingBytes = nil
 				}
 
-				if output != "" {
-					select {
-					case outputChan <- output:
-					case <-ctx.Done():
-						return
+				// 检查末尾是否有不完整的 UTF-8 序列
+				validLen := findValidUTF8End(data)
+				if validLen < len(data) {
+					// 保留不完整的字节到下一次读取
+					pendingBytes = make([]byte, len(data)-validLen)
+					copy(pendingBytes, data[validLen:])
+					data = data[:validLen]
+				}
+
+				if len(data) > 0 {
+					output := sanitizeOutput(string(data))
+					// 扫描 GUI 错误提示
+					if guiTip := scanForGuiErrors(output); guiTip != "" {
+						output += guiTip
+					}
+
+					if output != "" {
+						select {
+						case outputChan <- output:
+						case <-ctx.Done():
+							return
+						}
 					}
 				}
 			}
@@ -479,4 +494,34 @@ func sanitizeOutput(s string) string {
 		}
 		return -1
 	}, s)
+}
+
+// findValidUTF8End 查找字节slice中最后一个完整UTF-8字符的结束位置
+// 如果末尾有不完整的UTF-8序列，返回不包含该序列的长度
+func findValidUTF8End(data []byte) int {
+	if len(data) == 0 {
+		return 0
+	}
+
+	// 如果整个字节序列都是有效的UTF-8，直接返回
+	if utf8.Valid(data) {
+		return len(data)
+	}
+
+	// 从末尾向前检查，找到最后一个完整的UTF-8字符
+	// UTF-8字符最多4字节，所以最多检查最后4个字节
+	checkLen := 4
+	if len(data) < checkLen {
+		checkLen = len(data)
+	}
+
+	for i := 1; i <= checkLen; i++ {
+		// 检查去掉末尾i个字节后是否有效
+		if utf8.Valid(data[:len(data)-i]) {
+			return len(data) - i
+		}
+	}
+
+	// 如果都无效，返回原长度（这种情况不应该发生）
+	return len(data)
 }

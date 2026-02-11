@@ -106,9 +106,9 @@
 <script setup>
 import { ref, computed, defineAsyncComponent, shallowRef, markRaw } from 'vue'
 import FileTreeNode from './FileTreeNode.vue'
-import Folder from '@/assets/Vue-icons/file.png'
-import smallFolder from '@/assets/Vue-icons/folder.png'
-import refreshIcon from '@/assets/Vue-icons/refresh.png'
+import Folder from '@/assets/Vue-icons/file.webp'
+import smallFolder from '@/assets/Vue-icons/folder.webp'
+import refreshIcon from '@/assets/Vue-icons/refresh.webp'
 
 const props = defineProps({
   activeFile: {

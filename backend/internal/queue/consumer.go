@@ -16,36 +16,88 @@ import (
 )
 
 type Consumer struct {
-	client *redis.Client
-	queue  string
-	pool   *docker.Pool
-	db     *gorm.DB
+	client    *redis.Client
+	queue     string
+	pool      *docker.Pool
+	db        *gorm.DB
+	redisAddr string // 保存 Redis 地址用于重连
 }
 
 func NewConsumer(addr string, pool *docker.Pool, db *gorm.DB) *Consumer {
 	rdb := redis.NewClient(&redis.Options{
-		Addr: addr,
+		Addr:         addr,
+		PoolSize:     10,              // 连接池大小
+		MinIdleConns: 2,               // 最小空闲连接
+		DialTimeout:  5 * time.Second, // 连接超时
+		ReadTimeout:  3 * time.Second, // 读取超时
+		WriteTimeout: 3 * time.Second, // 写入超时
 	})
 	return &Consumer{
-		client: rdb,
-		queue:  "code_execution_queue",
-		pool:   pool,
-		db:     db,
+		client:    rdb,
+		queue:     "code_execution_queue",
+		pool:      pool,
+		db:        db,
+		redisAddr: addr,
 	}
+}
+
+// reconnect 尝试重新连接 Redis
+func (c *Consumer) reconnect() error {
+	// 关闭旧连接
+	if c.client != nil {
+		c.client.Close()
+	}
+
+	// 创建新连接
+	c.client = redis.NewClient(&redis.Options{
+		Addr:         c.redisAddr,
+		PoolSize:     10,
+		MinIdleConns: 2,
+		DialTimeout:  5 * time.Second,
+		ReadTimeout:  3 * time.Second,
+		WriteTimeout: 3 * time.Second,
+	})
+
+	// 测试连接
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return c.client.Ping(ctx).Err()
 }
 
 func (c *Consumer) StartWorker() {
 	ctx := context.Background()
 	log.Println("[Consumer] 工作进程已启动，等待任务...")
 
+	consecutiveErrors := 0 // 连续错误计数
+	maxRetries := 5        // 最大重试次数
+
 	for {
 		// BLPop 阻塞直到有新任务可用
 		result, err := c.client.BLPop(ctx, 0, c.queue).Result()
 		if err != nil {
-			log.Printf("[Consumer] Redis BLPop 错误: %v\n", err)
-			time.Sleep(1 * time.Second)
+			consecutiveErrors++
+
+			// 计算指数退避时间: 1s, 2s, 4s, 8s, 16s (最大)
+			backoff := time.Duration(1<<min(consecutiveErrors-1, 4)) * time.Second
+			log.Printf("[Consumer] Redis BLPop 错误 (第 %d 次): %v，%v 后重试...\n", consecutiveErrors, err, backoff)
+
+			// 如果连续错误达到阈值，尝试重连
+			if consecutiveErrors >= maxRetries {
+				log.Println("[Consumer] 连续错误次数过多，尝试重新连接 Redis...")
+				if reconnErr := c.reconnect(); reconnErr != nil {
+					log.Printf("[Consumer] 重连失败: %v\n", reconnErr)
+				} else {
+					log.Println("[Consumer] Redis 重连成功！")
+					consecutiveErrors = 0 // 重置错误计数
+				}
+			}
+
+			time.Sleep(backoff)
 			continue
 		}
+
+		// 成功获取任务，重置错误计数
+		consecutiveErrors = 0
 
 		// result[0] 是队列名称，result[1] 是值
 		var task Task
