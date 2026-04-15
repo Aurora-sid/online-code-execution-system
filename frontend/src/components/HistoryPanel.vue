@@ -179,7 +179,6 @@ const languageColors = {
 
   javascript: 'bg-yellow-400/20',
   rust: 'bg-orange-600/20',
-  csharp: 'bg-indigo-600/20',
   typescript: 'bg-blue-600/20'
 }
 

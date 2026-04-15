@@ -23,9 +23,13 @@ type Consumer struct {
 	redisAddr string // 保存 Redis 地址用于重连
 }
 
+/*进行 Redis 连接的建立封装以及提供面对服务器
+由于长时间空跑链接意外中断导致获取失效后重连接机制
+（含有指数退让避免造成闪断后的雪崩连接冲击）。*/
+// 函数名+返回值类型+参数列表
 func NewConsumer(addr string, pool *docker.Pool, db *gorm.DB) *Consumer {
 	rdb := redis.NewClient(&redis.Options{
-		Addr:         addr,
+		Addr:         addr,    // Redis 服务器地址
 		PoolSize:     10,              // 连接池大小
 		MinIdleConns: 2,               // 最小空闲连接
 		DialTimeout:  5 * time.Second, // 连接超时
@@ -59,14 +63,19 @@ func (c *Consumer) reconnect() error {
 	})
 
 	// 测试连接
+	// ctx是一个上下文对象，提供了控制函数执行的生命周期和取消机制。
+	//  cancel是一个函数，用于取消上下文。当调用cancel()时，
+	// ctx会被标记为已取消，所有使用该ctx的操作都会收到取消信号。
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	return c.client.Ping(ctx).Err()
+	defer cancel() // 通过发送PING命令测试连接是否成功。如果连接成功，返回nil；如果连接失败，返回错误信息。
+	return c.client.Ping(ctx).Err()  // 返回连接测试结果，供调用者判断是否重连成功
 }
 
+
+// StartWorker 启动消费者工作进程，持续监听 Redis 队列并处理任务
 func (c *Consumer) StartWorker() {
-	ctx := context.Background()
-	log.Println("[Consumer] 工作进程已启动，等待任务...")
+	ctx := context.Background()  // 创建一个新的上下文对象，通常用于控制函数执行的生命周期和取消机制。
+	log.Println("[Consumer] 工作进程已启动，等待任务...") // 打印日志，表明消费者工作进程已经启动，并显示当前的Redis客户端信息
 
 	consecutiveErrors := 0 // 连续错误计数
 	maxRetries := 5        // 最大重试次数
@@ -75,7 +84,7 @@ func (c *Consumer) StartWorker() {
 		// BLPop 阻塞直到有新任务可用
 		result, err := c.client.BLPop(ctx, 0, c.queue).Result()
 		if err != nil {
-			consecutiveErrors++
+			consecutiveErrors++  // 增加连续错误计数
 
 			// 计算指数退避时间: 1s, 2s, 4s, 8s, 16s (最大)
 			backoff := time.Duration(1<<min(consecutiveErrors-1, 4)) * time.Second
@@ -139,13 +148,15 @@ func (c *Consumer) StartWorker() {
 }
 
 // executeInteractive 使用交互式方式执行代码
+// 限定执行时间为 25 秒，允许实时输入输出交互
 func (c *Consumer) executeInteractive(ctx context.Context, task Task, containerID string) {
 	startTime := time.Now() // 记录执行开始时间
 
+	// 限定生命期为 25 秒，超过则强制终止
 	execCtx, cancel := context.WithTimeout(ctx, 25*time.Second)
 	defer cancel()
 
-	// 创建 stdin 和 output channels
+	// 创建 stdin 和 output channels，用于与 Sandbox 进行交互
 	stdinChan := make(chan string, 10)
 	outputChan := make(chan string, 100)
 
@@ -155,12 +166,12 @@ func (c *Consumer) executeInteractive(ctx context.Context, task Task, containerI
 
 	// Goroutine: 从 Redis 接收输入并发送到 stdinChan
 	go func() {
-		ch := pubsub.Channel()
+		ch := pubsub.Channel() // 获取订阅频道的消息通道
 		for {
 			select {
-			case msg, ok := <-ch:
+			case msg, ok := <-ch:  // 从消息通道接收消息
 				if !ok {
-					return
+					return  // 频道关闭，退出 Goroutine
 				}
 				select {
 				case stdinChan <- msg.Payload:
@@ -190,6 +201,17 @@ func (c *Consumer) executeInteractive(ctx context.Context, task Task, containerI
 			}
 		}
 	}()
+	
+	// 等待前端的 WebSocket 成功订阅 Redis 的 task_output 频道
+	for i := 0; i < 30; i++ { // 最多等待 30 * 100ms = 3秒
+		res, err := c.client.PubSubNumSub(ctx, "task_output:"+task.ID).Result()
+		// 如果订阅人数 > 0，说明前端 WebSocket 已经准备好了
+		if err == nil && res["task_output:"+task.ID] > 0 {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
 
 	// 执行代码
 	exitCode, err := c.pool.Sandbox.ExecuteInteractive(execCtx, containerID, task.Language, task.Code, stdinChan, outputChan)

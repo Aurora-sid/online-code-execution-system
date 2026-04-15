@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 
-// 简单的响应式状态管理 (不使用 Pinia 以保持简洁)
+// 简单的响应式状态管理 
 const token = ref(localStorage.getItem('token') || '')
 const user = ref(JSON.parse(localStorage.getItem('user') || 'null'))
 
@@ -10,6 +10,7 @@ export function useAuth() {
     const login = (tokenValue, userData) => {
         token.value = tokenValue
         user.value = userData
+        // 存储token和用户信息到localStorage
         localStorage.setItem('token', tokenValue)
         localStorage.setItem('user', JSON.stringify(userData))
     }

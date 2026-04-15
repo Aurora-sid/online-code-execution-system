@@ -2,10 +2,6 @@
   <div class="min-h-screen w-full bg-[#0F172A] text-slate-200 flex items-center justify-center font-sans selection:bg-cyan-500/30 relative overflow-hidden pb-15">
     <!-- 背景特效 -->
     <div class="absolute inset-0 z-0">
-      <!-- 渐变光斑 -->
-      <!-- <div class="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-cyan-500/20 rounded-full blur-[120px] animate-pulse"></div>
-      <div class="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-blue-600/20 rounded-full blur-[120px] animate-pulse" style="animation-delay: 2s"></div> -->
-      <!-- <img :src="loginBg" alt="Background" class="w-full h-full object-cover opacity-80" /> -->
       <img src="../assets/login.webp" alt="Background" class="w-full h-full object-cover opacity-60" />
       <!-- 网格覆盖层（科技感装饰） -->
       <div class="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:50px_50px] opacity-20"></div>
@@ -181,7 +177,9 @@
 <script setup>
 import { ref, reactive, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import api from '../api'
+// 引入API模块
+import api from '../api/index'
+// 引入认证状态管理
 import { useAuth } from '../stores/auth'
 import loginBg from '../assets/login.webp'
 
@@ -198,6 +196,7 @@ watch(activeTab, () => {
   error.value = ''
   success.value = ''
 })
+// 使用ref和reactive来管理表单状态、加载状态、错误和成功消息，以及密码可见性
 const loading = ref(false)
 const error = ref('')
 const success = ref('')
@@ -217,12 +216,12 @@ onMounted(() => {
 })
 
 // 密码最小长度检查仅使用本地验证
-
+// 登录时不需要确认密码，注册时需要，并且两者必须匹配
 const handleSubmit = async () => {
   error.value = ''
   success.value = ''
   
-  // 验证
+  // 注册时检查密码和确认密码是否匹配
   if (activeTab.value === 'register' && form.password !== form.confirmPassword) {
     error.value = '两次输入的密码不一致'
     return
@@ -236,12 +235,13 @@ const handleSubmit = async () => {
   loading.value = true
   
   try {
+    // 登录和注册的API调用逻辑
     if (activeTab.value === 'login') {
       const response = await api.post('/login', {
         username: form.username,
         password: form.password
       })
-      
+      // 存储token和用户信息到全局状态管理，并跳转到主页
       login(response.data.token, response.data.user)
       router.push('/')
     } else {

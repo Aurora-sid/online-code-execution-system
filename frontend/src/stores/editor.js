@@ -13,7 +13,6 @@ export const useEditorStore = defineStore('editor', () => {
         go: 'package main\n\nimport "fmt"\n\nfunc main() {\n    fmt.Println("Hello Aurora Code from Go 1.19.5")\n}',
         javascript: 'console.log("Hello Aurora Code from JavaScript (Node.js)!");',
         rust: 'fn main() {\n    println!("Hello Aurora Code from Rust!");\n}',
-        csharp: 'using System;\n\nclass Program {\n    static void Main() {\n        Console.WriteLine("Hello Aurora Code from C# (.NET 8)!");\n    }\n}',
         typescript: 'const msg: string = "Hello Aurora Code from TypeScript!";\nconsole.log(msg);'
     }
 

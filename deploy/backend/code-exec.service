@@ -1,0 +1,30 @@
+[Unit]
+Description=Code-Exec 在线编程执行系统后端
+Documentation=https://github.com/your-repo/code-exec
+After=network.target docker.service mysql.service redis.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/code-exec
+ExecStart=/opt/code-exec/code-exec
+Restart=always
+RestartSec=5
+
+# 环境变量文件（密钥、DSN 等配置）
+# 前缀 - 表示文件不存在时忽略，不会导致启动失败
+EnvironmentFile=-/opt/code-exec/.env
+
+# 日志
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=code-exec
+
+# 安全限制
+LimitNOFILE=65536
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target

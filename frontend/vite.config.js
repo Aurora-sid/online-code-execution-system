@@ -35,8 +35,10 @@ export default defineConfig({
     host: true, // 允许局域网访问
     proxy: {
       '/api': {
+        // 后端接口地址，开发时代理到本地后端服务器
         target: 'http://localhost:8080',
         changeOrigin: true,
+        ws: true,
       }
     }
   },

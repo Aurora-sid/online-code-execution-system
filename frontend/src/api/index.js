@@ -3,9 +3,8 @@ import router from '../router'
 
 // 获取 API 基础 URL
 const getBaseURL = () => {
-    // 优先使用环境变量，否则使用 Vite 代理
-    const envUrl = import.meta.env.VITE_API_URL
-    return envUrl ? `${envUrl}/api` : '/api'
+    // 总是使用相对路径，让代理或 Nginx 处理
+    return '/api'
 }
 
 // 创建带有基础URL的axios实例
@@ -34,10 +33,10 @@ api.interceptors.response.use(
     (response) => response,
     (error) => {
         if (error.response && error.response.status === 401) {
-            // Clear invalid token
+            // Token 无效或过期，清除本地存储并跳转到登录页
             localStorage.removeItem('token')
             localStorage.removeItem('user')
-            // Redirect to login
+            // 只有在当前还在受保护路由时才跳转 (避免用户已经手动跳到公开页)
             router.push('/login')
         }
         return Promise.reject(error)
@@ -79,10 +78,8 @@ export const fetchSubmissions = async () => {
 
 // 获取 WebSocket URL
 export const getWebSocketURL = (taskId) => {
-    const apiUrl = import.meta.env.VITE_API_URL || window.location.origin
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const host = apiUrl.replace(/^https?:\/\//, '')
-    return `${wsProtocol}//${host}/api/ws?taskId=${taskId}`
+    return `${wsProtocol}//${window.location.host}/api/ws?taskId=${taskId}`
 }
 
 // 智能代码分析 - 调用 LLM API

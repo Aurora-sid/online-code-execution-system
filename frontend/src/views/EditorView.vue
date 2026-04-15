@@ -1,6 +1,6 @@
 <template>
   <div 
-    class="h-screen w-full bg-cover bg-center bg-no-repeat flex flex-col font-sans selection:bg-primary/20 overflow-hidden relative transition-all duration-300"
+    class="h-screen w-full bg-cover bg-center bg-no-repeat flex flex-col font-sans selection:bg-primary/20 overflow-hidden relative"
     :style="{ backgroundImage: `url(${backgroundImage})` }"
   >
     <!-- 顶部导航栏 -->
@@ -45,8 +45,27 @@
         /> -->
 
         <!-- 代码编辑器 -->
-        <div ref="editorContainer" class="relative bg-[#0c0c0e]/70 transition-all duration-300" :style="{ height: terminalCollapsed ? (editorHeight + terminalHeight - 32) + 'px' : editorHeight + 'px' }">
+        <div ref="editorContainer" class="relative bg-[#0c0c0e]/70 will-change-[height] transition-[height] duration-200" :style="{ height: terminalCollapsed ? (editorHeight + terminalHeight - 32) + 'px' : editorHeight + 'px' }">
           <CodeEditor v-model="code" :language="currentLanguage" :fontSize="editorFontSize" />
+
+          <!-- 文件修改指示器浮动条 -->
+          <Transition name="toast">
+            <div
+              v-if="currentFileHandle && isFileModified"
+              class="absolute top-3 right-3 z-20 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/90 backdrop-blur-sm text-white text-xs font-medium shadow-lg shadow-amber-500/20 border border-amber-400/30"
+            >
+              <span class="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
+              <span>已修改</span>
+              <button
+                @click="quickSave"
+                class="ml-1 px-2 py-0.5 rounded bg-white/20 hover:bg-white/30 transition-colors flex items-center gap-1"
+                title="保存 (Ctrl+S)"
+              >
+                <i class="ph ph-floppy-disk text-sm"></i>
+                <span>保存</span>
+              </button>
+            </div>
+          </Transition>
         </div>
 
         <!-- 可拖动分割线 -->
@@ -63,7 +82,7 @@
         <!-- 终端面板 -->
         <div 
           ref="terminalContainer"
-          class="flex flex-col bg-gray-900/70 transition-all duration-300"
+          class="flex flex-col bg-gray-900/70 will-change-[height] transition-[height] duration-200"
           :style="{ height: terminalCollapsed ? '32px' : terminalHeight + 'px' }"
         >
           <Terminal 
@@ -97,13 +116,18 @@
     <Transition name="slide-right">
       <div 
         v-if="showAnalysis" 
-        class="fixed right-0 top-14 bottom-6 w-96 max-w-full z-40 shadow-2xl border-l border-gray-200"
+        class="fixed inset-0 z-40"
+        @click.self="showAnalysis = false"
       >
-        <AnalysisPanel 
-          :code="code" 
-          :language="currentLanguage"
-          @close="showAnalysis = false"
-        />
+        <div 
+          class="absolute right-0 top-14 bottom-6 w-96 max-w-full shadow-2xl border-l border-gray-200"
+        >
+          <AnalysisPanel 
+            :code="code" 
+            :language="currentLanguage"
+            @close="showAnalysis = false"
+          />
+        </div>
       </div>
     </Transition>
 
@@ -180,6 +204,7 @@ let currentWebSocket = null
 
 // 侧边栏和标签页的文件列表
 const files = computed(() => {
+  // 根据当前语言生成文件列表，主文件为可编辑状态，其他文件为只读状态
   const ext = fileExtensions[currentLanguage.value] || 'txt'
   return [
     { name: currentFile.value, type: ext, unsaved: true },
@@ -189,35 +214,35 @@ const files = computed(() => {
   ]
 })
 
+// 当前活动的文件名（主文件）
 const activeFileName = computed(() => currentFile.value)
 
 const currentFile = computed(() => {
+  // 根据当前语言返回主文件名
   const map = {
     cpp: 'main.cpp',
     c: 'main.c',
     java: 'Main.java',
     python: 'main.py',
-
     go: 'main.go',
     javascript: 'main.js',
     rust: 'main.rs',
-    csharp: 'Program.cs',
     typescript: 'main.ts',
   }
+  // 如果当前语言没有映射，默认使用 script 作为主文件名
   return map[currentLanguage.value] || 'script'
 })
 
 const languageDisplayName = computed(() => {
+  // 根据当前语言返回显示名称
   const map = {
     cpp: 'C++',
     c: 'C',
     java: 'Java',
     python: 'Python',
-
     go: 'Go',
     javascript: 'JavaScript',
     rust: 'Rust',
-    csharp: 'C#',
     typescript: 'TypeScript',
   }
   return map[currentLanguage.value] || 'Text'
@@ -232,11 +257,11 @@ const fileExtensions = {
   go: 'go',
   javascript: 'js',
   rust: 'rs',
-  csharp: 'cs',
   typescript: 'ts'
 }
 
 const mimeTypes = {
+  // 语言对应的 MIME 类型，用于文件保存时的类型提示
   cpp: 'text/x-c++src',
   c: 'text/x-csrc',
   java: 'text/x-java-source',
@@ -245,7 +270,6 @@ const mimeTypes = {
   go: 'text/x-go',
   javascript: 'text/javascript',
   rust: 'text/x-rustsrc',
-  csharp: 'text/x-csharp',
   typescript: 'text/typescript'
 }
 
@@ -259,7 +283,6 @@ const snippets = {
   go: 'package main\n\nimport "fmt"\n\nfunc main() {\n    fmt.Println("Hello Aurora Code from Go 1.19.5")\n}',
   javascript: 'console.log("Hello Aurora Code from JavaScript (Node.js)!");',
   rust: 'fn main() {\n    println!("Hello Aurora Code from Rust!");\n}',
-  csharp: 'using System;\n\nclass Program {\n    static void Main() {\n        Console.WriteLine("Hello Aurora Code from C# (.NET 8)!");\n    }\n}',
   typescript: 'const msg: string = "Hello Aurora Code from TypeScript!";\nconsole.log(msg);'
 }
 
@@ -273,12 +296,11 @@ const handleOpenFolder = async () => {
   // 显示侧边栏
   sidebarCollapsed.value = false
   // 这里可以扩展为调用 File System Access API 打开文件夹
+
 }
 
 // 处理从侧边栏打开文件
 const handleOpenFile = (fileInfo) => {
-  // 设置文件内容
-  code.value = fileInfo.content
   currentFilePath.value = fileInfo.path
   currentFileHandle.value = fileInfo.handle
   isFileModified.value = false
@@ -303,6 +325,11 @@ const handleOpenFile = (fileInfo) => {
   }
   
   const lang = extToLang[fileInfo.extension] || 'plaintext'
+  
+  // 先将文件内容存入 codeMap，再切换语言
+  // 这样 watch(currentLanguage) 触发时能从 codeMap 取到正确内容，不会 fallback 到默认模板
+  editorStore.updateCode(lang, fileInfo.content)
+  code.value = fileInfo.content
   currentLanguage.value = lang
   
   terminalRef.value?.clear()
@@ -329,13 +356,13 @@ const runCode = async () => {
   terminalRef.value.clear()
   terminalRef.value.disableInput() // 先禁用输入
   editorStore.clearOutput() // 清除持久化的输出
-  terminalRef.value.write('\r\n\x1b[34m> Compiling and running...\x1b[0m\r\n')
-  editorStore.appendOutput('\r\n\x1b[34m> Compiling and running...\x1b[0m\r\n')
+  terminalRef.value.write('\r\n\x1b[34m> Compiling and running...\x1b[0m\r\n') // 同步写入持久化输出
+  editorStore.appendOutput('\r\n\x1b[34m> Compiling and running...\x1b[0m\r\n')  // 先写入编译提示，后续输出会追加在后面
 
   // 关闭之前的 WebSocket 连接
   if (currentWebSocket) {
     currentWebSocket.close()
-    currentWebSocket = null
+    currentWebSocket = null  // 确保引用被清空
   }
 
   try {
@@ -424,6 +451,38 @@ const handleTerminalInput = (input) => {
       type: 'stdin',
       data: input
     }))
+  }
+}
+
+// 快速保存：直接写回原文件（不弹对话框）
+const quickSave = async () => {
+  if (!currentFileHandle.value) {
+    saveToLocal()
+    return
+  }
+  try {
+    const writable = await currentFileHandle.value.createWritable()
+    await writable.write(code.value)
+    await writable.close()
+    isFileModified.value = false
+    showSaveToast.value = true
+    setTimeout(() => showSaveToast.value = false, 2000)
+    terminalRef.value?.write(`\x1b[32m> 文件已保存: ${currentFilePath.value || currentFileHandle.value.name}\x1b[0m\r\n`)
+  } catch (err) {
+    console.warn('Quick save failed, falling back:', err)
+    saveToLocal()
+  }
+}
+
+// Ctrl+S 快捷键处理
+const handleKeyDown = (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    e.preventDefault()
+    if (currentFileHandle.value) {
+      quickSave()
+    } else {
+      saveToLocal()
+    }
   }
 }
 
@@ -598,6 +657,7 @@ onMounted(() => {
   
   // 窗口调整大小时更新
   window.addEventListener('resize', handleWindowResize)
+  window.addEventListener('keydown', handleKeyDown)
   
   // 恢复之前运行的输出
   if (editorStore.terminalOutput) {
@@ -617,6 +677,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   // 移除 resize 监听器
   window.removeEventListener('resize', handleWindowResize)
+  window.removeEventListener('keydown', handleKeyDown)
   
   // 关闭 WebSocket 连接
   if (currentWebSocket) {

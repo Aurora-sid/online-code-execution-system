@@ -14,6 +14,7 @@ package docker
 // 所以宿主机上没有什么需要清理的！
 
 // 我们可以在这里实现一个 "Reaper" 来检查僵尸容器。
+// 避免随着项目的长期在线或者代码沙箱未妥善回收导致的主机硬盘或者节点计算资源干涸。
 
 import (
 	"context"
@@ -23,6 +24,7 @@ import (
 )
 
 func StartReaper(s *Sandbox) {
+	// 每小时检查一次容器
 	ticker := time.NewTicker(1 * time.Hour)
 	go func() {
 		for range ticker.C {

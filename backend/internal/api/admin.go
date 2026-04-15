@@ -1,7 +1,9 @@
 package api
 
 import (
+	"code-exec/internal/ai"
 	"code-exec/internal/docker"
+	"code-exec/internal/logbuf"
 	"code-exec/internal/model"
 	"context"
 	"net/http"
@@ -15,13 +17,15 @@ import (
 
 // AdminHandler 管理员 API 处理器
 type AdminHandler struct {
-	DB   *gorm.DB
-	Pool *docker.Pool
+	DB     *gorm.DB
+	Pool   *docker.Pool
+	LLM    *ai.LLMClient      // 大模型客户端（管理用）
+	LogBuf *logbuf.RingBuffer  // 日志环形缓冲区
 }
 
 // NewAdminHandler 创建管理员处理器实例
-func NewAdminHandler(db *gorm.DB, pool *docker.Pool) *AdminHandler {
-	return &AdminHandler{DB: db, Pool: pool}
+func NewAdminHandler(db *gorm.DB, pool *docker.Pool, llm *ai.LLMClient, lb *logbuf.RingBuffer) *AdminHandler {
+	return &AdminHandler{DB: db, Pool: pool, LLM: llm, LogBuf: lb}
 }
 
 // AdminMiddleware 管理员权限中间件
@@ -315,8 +319,8 @@ func (h *AdminHandler) GetWeeklySubmissionStats(c *gin.Context) {
 }
 
 // RegisterAdminRoutes 注册管理员路由
-func RegisterAdminRoutes(rg *gin.RouterGroup, db *gorm.DB, pool *docker.Pool) {
-	adminHandler := NewAdminHandler(db, pool)
+func RegisterAdminRoutes(rg *gin.RouterGroup, db *gorm.DB, pool *docker.Pool, llm *ai.LLMClient, lb *logbuf.RingBuffer) {
+	adminHandler := NewAdminHandler(db, pool, llm, lb)
 
 	admin := rg.Group("/admin")
 	admin.Use(AuthMiddleware(), AdminMiddleware())
@@ -330,7 +334,56 @@ func RegisterAdminRoutes(rg *gin.RouterGroup, db *gorm.DB, pool *docker.Pool) {
 
 		// 容器池管理
 		admin.POST("/pool/reset", adminHandler.ResetPool)
+
+		// 后端日志查看
+		admin.GET("/logs", adminHandler.GetLogs)
+		admin.POST("/logs/clear", adminHandler.ClearLogs)
+
+		// 大模型管理
+		admin.GET("/llm/status", adminHandler.GetLLMStatus)
+		admin.POST("/llm/toggle", adminHandler.SetLLMEnabled)
+		admin.PUT("/llm/model", adminHandler.SetLLMModel)
+		admin.POST("/llm/stats/reset", adminHandler.ResetLLMStats)
 	}
+}
+
+// ============================================================
+//  后端日志查看 API
+// ============================================================
+
+// GetLogs 获取后端运行日志（从环形缓冲区读取）
+func (h *AdminHandler) GetLogs(c *gin.Context) {
+	if h.LogBuf == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "日志缓冲区未初始化"})
+		return
+	}
+
+	// 默认返回 200 条，最多 500 条
+	countStr := c.DefaultQuery("count", "200")
+	count, err := strconv.Atoi(countStr)
+	if err != nil || count <= 0 {
+		count = 200
+	}
+	if count > 500 {
+		count = 500
+	}
+
+	logs := h.LogBuf.GetRecent(count)
+	c.JSON(http.StatusOK, gin.H{
+		"logs":  logs,
+		"total": h.LogBuf.Count(),
+	})
+}
+
+// ClearLogs 清空日志缓冲区
+func (h *AdminHandler) ClearLogs(c *gin.Context) {
+	if h.LogBuf == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "日志缓冲区未初始化"})
+		return
+	}
+
+	h.LogBuf.Clear()
+	c.JSON(http.StatusOK, gin.H{"message": "日志已清空"})
 }
 
 // ResetPool 重置容器池
@@ -351,4 +404,79 @@ func (h *AdminHandler) ResetPool(c *gin.Context) {
 		"message": "容器池已重置",
 		"removed": removed,
 	})
+}
+
+// ============================================================
+//  大模型管理 API
+// ============================================================
+
+// GetLLMStatus 获取大模型当前状态和使用统计
+func (h *AdminHandler) GetLLMStatus(c *gin.Context) {
+	if h.LLM == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "LLM client not available"})
+		return
+	}
+	c.JSON(http.StatusOK, h.LLM.GetStatus())
+}
+
+// SetLLMEnabled 启用/禁用 AI 分析功能
+func (h *AdminHandler) SetLLMEnabled(c *gin.Context) {
+	if h.LLM == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "LLM client not available"})
+		return
+	}
+
+	var input struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数无效: " + err.Error()})
+		return
+	}
+
+	h.LLM.SetEnabled(input.Enabled)
+	status := "已禁用"
+	if input.Enabled {
+		status = "已启用"
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"message": "AI 分析功能" + status,
+		"enabled": input.Enabled,
+	})
+}
+
+// llmModelInput 模型切换请求
+type llmModelInput struct {
+	Model string `json:"model" binding:"required"`
+}
+
+// SetLLMModel 动态切换大模型
+func (h *AdminHandler) SetLLMModel(c *gin.Context) {
+	if h.LLM == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "LLM client not available"})
+		return
+	}
+
+	var input llmModelInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数无效: " + err.Error()})
+		return
+	}
+
+	h.LLM.SetModel(input.Model)
+	c.JSON(http.StatusOK, gin.H{
+		"message": "模型已切换为 " + input.Model,
+		"model":   input.Model,
+	})
+}
+
+// ResetLLMStats 重置 LLM 使用统计
+func (h *AdminHandler) ResetLLMStats(c *gin.Context) {
+	if h.LLM == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "LLM client not available"})
+		return
+	}
+
+	h.LLM.ResetStats()
+	c.JSON(http.StatusOK, gin.H{"message": "LLM 使用统计已重置"})
 }

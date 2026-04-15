@@ -10,11 +10,11 @@ languages:
   - id: cpp
     image: code-exec/cpp
     filename: main.cpp
-    compile_cmd: ["sh", "-c", "g++ main.cpp -o main && ./main"]
+    compile_cmd: ["sh", "-c", "g++ main.cpp -o main -lm && ./main"]
   - id: c
     image: code-exec/c
     filename: main.c
-    compile_cmd: ["sh", "-c", "gcc main.c -o main && ./main"]
+    compile_cmd: ["sh", "-c", "gcc main.c -o main -lm && ./main"]
   - id: go
     image: code-exec/go
     filename: main.go
@@ -23,10 +23,6 @@ languages:
     image: code-exec/rust
     filename: main.rs
     compile_cmd: ["sh", "-c", "rustc main.rs -o main && ./main"]
-  - id: csharp
-    image: code-exec/csharp
-    filename: Program.cs
-    run_cmd: ["sh", "-c", "if [ ! -f *.csproj ]; then dotnet new console --force > /dev/null 2>&1; fi; dotnet run"]
 
   - id: javascript
     image: code-exec/js

@@ -52,6 +52,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 // Login 用户登录接口
 func (h *AuthHandler) Login(c *gin.Context) {
 	var input struct {
+		// token和用户信息发送到前端，前端存储在localStorage中
 		Username string `json:"username" binding:"required"`
 		Password string `json:"password" binding:"required"`
 	}

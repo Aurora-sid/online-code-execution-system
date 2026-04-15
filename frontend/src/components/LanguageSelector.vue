@@ -86,7 +86,6 @@ const defaultLanguages = [
   { value: "cpp", label: "C++", icon: "ph ph-file-cpp text-purple-500" },
   { value: "c", label: "C", icon: "ph ph-file-c text-blue-600" },
   { value: "rust", label: "Rust", icon: "ph ph-gear text-orange-600" },
-  { value: "csharp", label: "C#", icon: "csharp.webp" }, // Custom icon from local assets
   { value: "typescript", label: "TypeScript", icon: "ph ph-file-ts text-blue-500" },
 ]
 

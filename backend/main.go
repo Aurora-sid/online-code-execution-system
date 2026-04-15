@@ -6,6 +6,7 @@ import (
 	"code-exec/internal/api"
 	"code-exec/internal/auth"
 	"code-exec/internal/docker"
+	"code-exec/internal/logbuf"
 	"code-exec/internal/model"
 	"code-exec/internal/queue"
 	"context"
@@ -30,6 +31,11 @@ func main() {
 
 	// 加载配置
 	cfg := config.Load()
+
+	// 初始化日志环形缓冲区（500 条），挂载到标准 log
+	logBuf := logbuf.NewRingBuffer(500)
+	log.SetOutput(logbuf.NewTeeWriter(logBuf))
+	log.SetFlags(log.Ldate | log.Ltime)
 
 	// 初始化JWT认证模块
 	auth.Init(cfg.JWTSecret)
@@ -92,18 +98,28 @@ func main() {
 		log.Printf("[启动] 已清理 %d 个上次运行遗留的容器", removed)
 	}
 
+	// 启动弹性调度水位监控协程（清理残留容器后再启动）
+	pool.StartMonitor(ctx)
+
 	// API 组
 	v1 := r.Group("/api")
 	{
 		api.RegisterRoutes(v1, db, pool, cfg.RedisAddr)
-		ai.RegisterRoutes(v1, cfg) // 注册 AI 分析路由
+		aiHandler := ai.RegisterRoutes(v1, cfg) // 注册 AI 分析路由，获取 handler 实例
+
+		// 注册管理员路由（传入 LLM 客户端和日志缓冲以支持管理功能）
+		api.RegisterAdminRoutes(v1, db, pool, aiHandler.Client, logBuf)
 	}
 
 	// 启动队列消费者
 	consumerWorker := queue.NewConsumer(cfg.RedisAddr, pool, db)
 	go consumerWorker.StartWorker()
+	//log.Println("队列消费者已启动",consumerWorker)
+	// 2026/04/13 17:43:48 队列消费者已启动 
+	// &{0xc00047ac40 code_execution_queue 0xc000243200 0xc0001ff3e0 127.0.0.1:16379}
+	// redis客户端指针+队列名称+docker池指针+数据库指针+redis地址
 
-	// 优雅停机
+	// 停机
 	srv := &http.Server{
 		Addr:    cfg.ServerPort,
 		Handler: r,
@@ -122,9 +138,12 @@ func main() {
 	<-quit
 	log.Println("正在关闭服务器...")
 
-	// 给予 5 秒的优雅停机时间
+	// 给予 5 秒的缓慢停机时间
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
+	// 停止容器池监控协程
+	pool.StopMonitor()
 
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Printf("服务器强制关闭: %v", err)
@@ -132,7 +151,7 @@ func main() {
 
 	// 关闭数据库连接
 	sqlDB.Close()
-	log.Println("服务器已优雅停止")
+	log.Println("服务器已停止")
 }
 
 // seedLanguages 初始化语言种子数据

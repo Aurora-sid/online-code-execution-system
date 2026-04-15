@@ -8,8 +8,22 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sync"
+	"sync/atomic"
 	"time"
 )
+
+// LLMStatus 大模型运行状态（返回给管理端）
+type LLMStatus struct {
+	Enabled      bool       `json:"enabled"`
+	Model        string     `json:"model"`
+	APIURL       string     `json:"apiUrl"`
+	APIKeySet    bool       `json:"apiKeySet"`  
+	TotalCalls   int64      `json:"totalCalls"`
+	SuccessCalls int64      `json:"successCalls"`
+	FailedCalls  int64      `json:"failedCalls"`
+	LastCallAt   *time.Time `json:"lastCallAt"`
+}
 
 // LLMClient 大模型客户端
 type LLMClient struct {
@@ -17,6 +31,18 @@ type LLMClient struct {
 	apiURL string
 	model  string
 	client *http.Client
+
+	// 启停开关
+	enabled bool
+
+	// 使用统计（原子操作，线程安全）
+	totalCalls   int64
+	successCalls int64
+	failedCalls  int64
+
+	// 可变字段保护，mutex缩写
+	mu         sync.RWMutex
+	lastCallAt *time.Time
 }
 
 // NewLLMClient 创建 LLM 客户端
@@ -24,13 +50,72 @@ func NewLLMClient(cfg *config.Config) *LLMClient {
 	log.Printf("[LLM] 初始化客户端: URL=%s, Model=%s, APIKey已配置=%v\n",
 		cfg.LLMAPIURL, cfg.LLMModel, cfg.LLMAPIKey != "")
 	return &LLMClient{
-		apiKey: cfg.LLMAPIKey,
-		apiURL: cfg.LLMAPIURL,
-		model:  cfg.LLMModel,
+		apiKey:  cfg.LLMAPIKey,  // 从配置加载 API Key
+		apiURL:  cfg.LLMAPIURL,
+		model:   cfg.LLMModel,
+		enabled: true, // 默认启用
 		client: &http.Client{
-			Timeout: 60 * time.Second, // 大模型可能需要较长时间
+			Timeout: 60 * time.Second,
 		},
 	}
+}
+
+// ======================== 管理方法 ========================
+
+// GetStatus 获取 LLM 当前状态和统计信息
+func (c *LLMClient) GetStatus() LLMStatus {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return LLMStatus{
+		Enabled:      c.enabled,
+		Model:        c.model,
+		APIURL:       c.apiURL,
+		APIKeySet:    c.apiKey != "",
+		TotalCalls:   atomic.LoadInt64(&c.totalCalls),
+		SuccessCalls: atomic.LoadInt64(&c.successCalls),
+		FailedCalls:  atomic.LoadInt64(&c.failedCalls),
+		LastCallAt:   c.lastCallAt,
+	}
+}
+
+// SetEnabled 设置启停状态
+func (c *LLMClient) SetEnabled(enabled bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.enabled = enabled
+	if enabled {
+		log.Println("[LLM] AI 分析功能已启用")
+	} else {
+		log.Println("[LLM] AI 分析功能已禁用")
+	}
+}
+
+// IsEnabled 检查是否启用
+func (c *LLMClient) IsEnabled() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.enabled
+}
+
+// SetModel 动态切换模型
+func (c *LLMClient) SetModel(model string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	old := c.model
+	c.model = model
+	log.Printf("[LLM] 模型已切换: %s → %s\n", old, model)
+}
+
+// ResetStats 重置统计计数
+func (c *LLMClient) ResetStats() {
+	atomic.StoreInt64(&c.totalCalls, 0)
+	atomic.StoreInt64(&c.successCalls, 0)
+	atomic.StoreInt64(&c.failedCalls, 0)
+	c.mu.Lock()
+	c.lastCallAt = nil
+	c.mu.Unlock()
+	log.Println("[LLM] 使用统计已重置")
 }
 
 // ChatMessage 对话消息
@@ -48,6 +133,7 @@ type ChatRequest struct {
 // ChatResponse 响应体 (兼容 OpenAI 格式)
 type ChatResponse struct {
 	Choices []struct {
+		// message格式为{"role": "assistant", "content": "分析结果..."}
 		Message struct {
 			Content string `json:"content"`
 		} `json:"message"`
@@ -72,10 +158,32 @@ const (
 func (c *LLMClient) AnalyzeCode(code, language string, analysisType AnalysisType) (string, error) {
 	log.Printf("[LLM] 开始分析: 语言=%s, 类型=%s, 代码长度=%d\n", language, analysisType, len(code))
 
+	// 检查启停开关
+	if !c.IsEnabled() {
+		log.Println("[LLM] AI 分析功能已被管理员禁用")
+		return "", fmt.Errorf("AI 分析功能已被管理员禁用")
+	}
+
+	// 递增调用计数 + 记录时间
+	atomic.AddInt64(&c.totalCalls, 1)
+	now := time.Now()
+	c.mu.Lock()
+	c.lastCallAt = &now
+	c.mu.Unlock()
+
 	if c.apiKey == "" {
 		log.Println("[LLM] 错误: API Key 未配置")
+		atomic.AddInt64(&c.failedCalls, 1)
 		return "", fmt.Errorf("LLM API Key 未配置")
 	}
+
+	// 读取可变配置（线程安全），PV操作
+	// 加锁
+	c.mu.RLock()  // 读取当前模型和 API URL，避免在调用过程中被修改
+	currentModel := c.model // 当前模型
+	currentURL := c.apiURL
+	// 用完后解锁
+	c.mu.RUnlock()  
 
 	// 根据分析类型构建 Prompt
 	systemPrompt := getSystemPrompt(analysisType, language)
@@ -86,27 +194,30 @@ func (c *LLMClient) AnalyzeCode(code, language string, analysisType AnalysisType
 	}
 
 	reqBody := ChatRequest{
-		Model:    c.model,
+		Model:    currentModel,
 		Messages: messages,
 	}
 
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
+		atomic.AddInt64(&c.failedCalls, 1)
 		return "", fmt.Errorf("序列化请求失败: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", c.apiURL, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest("POST", currentURL, bytes.NewBuffer(jsonData))
 	if err != nil {
+		atomic.AddInt64(&c.failedCalls, 1)
 		return "", fmt.Errorf("创建请求失败: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 
-	log.Printf("[LLM] 发送请求到 %s (Model: %s)\n", c.apiURL, c.model)
+	log.Printf("[LLM] 发送请求到 %s (Model: %s)\n", currentURL, currentModel)
 	resp, err := c.client.Do(req)
 	if err != nil {
 		log.Printf("[LLM] HTTP 请求失败: %v\n", err)
+		atomic.AddInt64(&c.failedCalls, 1)
 		return "", fmt.Errorf("请求 LLM API 失败: %w", err)
 	}
 	defer resp.Body.Close()
@@ -115,28 +226,34 @@ func (c *LLMClient) AnalyzeCode(code, language string, analysisType AnalysisType
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		atomic.AddInt64(&c.failedCalls, 1)
 		return "", fmt.Errorf("读取响应失败: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		log.Printf("[LLM] API 返回错误: 状态码=%d, 响应=%s\n", resp.StatusCode, string(body))
+		atomic.AddInt64(&c.failedCalls, 1)
 		return "", fmt.Errorf("LLM API 返回错误 (%d): %s", resp.StatusCode, string(body))
 	}
 
 	var chatResp ChatResponse
 	if err := json.Unmarshal(body, &chatResp); err != nil {
+		atomic.AddInt64(&c.failedCalls, 1)
 		return "", fmt.Errorf("解析响应失败: %w", err)
 	}
 
 	if chatResp.Error != nil {
+		atomic.AddInt64(&c.failedCalls, 1)
 		return "", fmt.Errorf("LLM 返回错误: %s", chatResp.Error.Message)
 	}
 
 	if len(chatResp.Choices) == 0 {
 		log.Println("[LLM] 错误: API 未返回结果")
+		atomic.AddInt64(&c.failedCalls, 1)
 		return "", fmt.Errorf("LLM 未返回结果")
 	}
 
+	atomic.AddInt64(&c.successCalls, 1)
 	log.Printf("[LLM] 分析成功, 结果长度: %d 字符\n", len(chatResp.Choices[0].Message.Content))
 	return chatResp.Choices[0].Message.Content, nil
 }

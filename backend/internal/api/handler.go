@@ -142,6 +142,5 @@ func RegisterRoutes(rg *gin.RouterGroup, db *gorm.DB, pool *docker.Pool, redisAd
 		})
 	}
 
-	// 注册管理员路由
-	RegisterAdminRoutes(rg, db, pool)
+	// 注意: Admin 路由现在在 main.go 中注册，因为需要 LLM 实例
 }
